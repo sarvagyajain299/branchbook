@@ -1,0 +1,101 @@
+# GitHub Actions CI for BranchBook
+#
+# Runs on every pull request and on pushes to develop and main:
+#   composer install -> npm build -> Pint (check only) -> Larastan -> migrate -> Pest
+# against a real MySQL 8.0 service container, because later phases depend on
+# MySQL-only features (generated columns, row locks, window functions).
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+# A newer push to the same branch cancels the older, now-pointless run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, static analysis and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_USER: sail
+          MYSQL_PASSWORD: password
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        # Don't start the tests until MySQL accepts connections.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, zip, intl, bcmath
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Breeze views use @vite, so feature tests need the built manifest.
+      - name: Build front-end assets
+        run: npm ci && npm run build
+
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # Quality gates: cheapest first, so a style error fails in seconds.
+      - name: Pint (code style)
+        run: vendor/bin/pint --test
+
+      - name: Larastan (level 6)
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: Migrate
+        run: php artisan migrate --force
+
+      - name: Pest
+        run: vendor/bin/pest
