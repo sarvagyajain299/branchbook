@@ -69,5 +69,9 @@ and `sail artisan schedule:work` running in two terminals, and Mailpit open at h
 | 36 | Click each **Download CSV** | `text/csv` files that open in Excel/Sheets; text starting with `=` is neutralised | auto + HTTP; **TO RUN** (open in a spreadsheet) |
 | 37 | Run the Postman collection in `docs/api` | Booking and staff flows succeed in order | **TO RUN** (API behaviour is covered by 34 automated tests) |
 
+| 38 | `sail artisan branchbook:anonymise-customers --dry-run` | Reports how many customers would be anonymised; changes nothing | auto |
+| 39 | Run it without `--dry-run` | Those customers become "Anonymised Customer"; their appointments remain; second run reports 0 | auto |
+| 40 | Fail a staff login, then read `storage/logs/security-*.log` | One line with a hashed email, no readable address | auto |
+
 ## F. Not built yet (cannot be QA'd)
-Backpack admin, reschedule, data-retention job, Arabic/RTL.
+Backpack admin, reschedule, Arabic/RTL.

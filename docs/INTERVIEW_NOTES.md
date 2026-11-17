@@ -430,3 +430,37 @@ MySQL has no percentile function, so I use the nearest-rank method with window f
 
 **Q3. You added an index. How do you know it helps?**
 I compared `EXPLAIN` before and after on 60,000 tickets after refreshing statistics with `ANALYZE TABLE`. Before: `type: ALL`, about 60,000 rows examined. After adding `(issued_at, branch_id)`: `type: range` using the new index and 5,246 rows examined, exactly the number of matching rows. I also noted that on the 150-row demo data MySQL correctly ignores indexes, so plan checks need realistic row counts.
+
+---
+
+## Phase 9 (rest) — Data retention, security log channel, dependency audit
+
+### What was built
+- `branchbook:anonymise-customers` (`--dry-run`, `--months=24`), scheduled daily at 03:00. Customers with no activity for 24 months lose their name, email and phone; their appointments stay so statistics are unchanged.
+- A separate `security` log channel (daily rotation, 90 days) for failed staff logins, API token creation and booking-code lockouts.
+- `composer audit` as a CI step: the build fails if a locked dependency has a known advisory.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Anonymise instead of delete | Appointments, no-show and utilisation reports and the audit trail still need the rows. Removing identifying data satisfies "don't keep personal data longer than needed" while keeping anonymous statistics. |
+| `anonymised_at` column | Makes the job idempotent (a second run finds nothing), shows who has been processed, and is indexed because the job selects `WHERE anonymised_at IS NULL`. |
+| Never touch customers with an upcoming active appointment | Anonymising someone who is about to visit would break check-in and reminders. |
+| "Last activity, or sign-up date if none" | `COALESCE(last_activity_at, created_at)` so customers who never became active still expire. |
+| Email becomes `anonymised-{id}@invalid.example` | `.invalid` is a reserved domain that can never receive mail, and the id keeps the value unique and traceable without identifying anyone. |
+| Delete the customer's OTP rows | Verification codes are keyed by email; they must go before the email does. |
+| `--dry-run` | Lets an operator see the effect before running a destructive job in production. |
+| Audit entry with a count only | Shows the job ran without recording who was affected. |
+| Separate security log channel | Security events can be rotated, retained longer and shipped to a monitoring system without mixing with application logs. Entries hold only hashes, ids and references. |
+| `composer audit` in CI | A known-vulnerable dependency is caught on the pull request instead of in production. |
+
+### Likely interview questions
+
+**Q1. How do you handle data retention for a bank customer database?**
+A scheduled command anonymises customers inactive for 24 months: it overwrites name, email and phone with fixed placeholders, clears the marketing flag and verification, deletes their verification codes and stamps `anonymised_at`. Appointments remain, so reports stay correct. It skips anyone with an upcoming active appointment, supports a dry-run mode, is idempotent, and writes an audit entry with only a count.
+
+**Q2. Why not simply delete old customers?**
+Foreign keys from appointments are restrictive on purpose, and deleting would also delete history that the no-show and utilisation reports depend on. Anonymising removes the personal data, which is the legal and privacy concern, while keeping the business facts. Deleting would be the choice only if the statistics were not needed.
+
+**Q3. What goes in a security log and what must stay out?**
+Events an investigator needs: failed logins, lockouts, token creation. Each entry carries identifiers that can be matched but not read: hashed email, user id, booking reference. It must never contain passwords, tokens, OTP codes, raw emails, phone numbers or names. A test asserts that a failed login with a mixed-case email logs only the hash of the normalised address.

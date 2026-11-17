@@ -15,6 +15,7 @@ use App\Services\OtpService;
 use App\Support\Audit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /** Step 2: check the emailed code; on success confirm the booking and create the manage token. */
@@ -46,9 +47,17 @@ final class VerifyBooking
         return match ($result) {
             OtpResult::Verified => $this->confirm($appointment, $now),
             OtpResult::Wrong => new VerificationOutcome(VerificationStatus::WrongCode, attemptsLeft: $left),
-            OtpResult::LockedOut => new VerificationOutcome(VerificationStatus::LockedOut),
+            OtpResult::LockedOut => $this->lockedOut($appointment),
             OtpResult::Expired, OtpResult::Missing => new VerificationOutcome(VerificationStatus::CodeExpired),
         };
+    }
+
+    private function lockedOut(Appointment $appointment): VerificationOutcome
+    {
+        // Someone guessed the code 5 times: worth a line in the security log (reference only, no personal data).
+        Log::channel('security')->warning('Booking code locked out', ['reference' => $appointment->reference]);
+
+        return new VerificationOutcome(VerificationStatus::LockedOut);
     }
 
     private function confirm(Appointment $appointment, CarbonImmutable $now): VerificationOutcome

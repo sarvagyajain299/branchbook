@@ -14,6 +14,7 @@ Artisan::command('inspire', function () {
 Schedule::command('branchbook:expire-holds')->everyMinute()->withoutOverlapping();
 Schedule::command('branchbook:send-reminders')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('branchbook:mark-no-shows')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('branchbook:anonymise-customers')->dailyAt('03:00')->withoutOverlapping();
 
 // Proves the scheduler is running; branchbook:health reads it.
 Schedule::call(fn () => Cache::put('scheduler:heartbeat', time(), 600))->name('scheduler-heartbeat')->everyMinute();

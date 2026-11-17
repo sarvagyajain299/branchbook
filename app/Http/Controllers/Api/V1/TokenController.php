@@ -10,6 +10,7 @@ use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class TokenController extends Controller
 {
@@ -38,6 +39,7 @@ class TokenController extends Controller
         $abilities = $user->role->apiAbilities();
         $token = $user->createToken($data['device_name'], $abilities, now()->addHours(12));
 
+        Log::channel('security')->info('API token created', ['user_id' => $user->id, 'device' => $data['device_name']]);
         Audit::record('api.token_created', $user, ['device' => $data['device_name'], 'abilities' => $abilities], $user);
 
         return response()->json([

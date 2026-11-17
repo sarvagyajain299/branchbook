@@ -23,10 +23,10 @@ next customer, and a waiting-room screen shows who goes to which desk.
 | Front desk check-in, walk-ins, daily queue tickets (`A-042`) | Done |
 | Advisor desk: Call next (concurrency-safe), start, complete, no-show, recall | Done |
 | Waiting-room display (public, no personal data, optional chime) | Done |
-| Audit log (append-only), security headers, health command | Done |
+| Audit log (append-only), security log channel, security headers, health command, data-retention job, `composer audit` in CI | Done |
 | REST API `/api/v1` (Sanctum tokens with per-role abilities, OpenAPI spec, Postman collection) | Done, see [`docs/openapi.yaml`](docs/openapi.yaml) |
 | Reports (raw SQL: window functions, recursive CTE, P90), Chart.js charts and streamed CSV exports at `/admin/reports` | Done |
-| Backpack admin panel, reschedule, data-retention job, Arabic/RTL | **Not built yet** (see "What I'd do next") |
+| Backpack admin panel, reschedule, Arabic/RTL | **Not built yet** (see "What I'd do next") |
 
 ## Stack
 Laravel 13 · PHP 8.3 · MySQL 8.0 · Laravel Sail (Docker) · Blade + Tailwind + small vanilla JS ·
@@ -38,7 +38,7 @@ Breeze (staff login) · Pest 4 · Pint · Larastan level 6 · GitHub Actions.
 $ sail composer ci
 pint --test      -> PASS
 phpstan (lvl 6)  -> [OK] No errors
-pest             -> Tests: 370 passed (2570 assertions)
+pest             -> Tests: 380 passed (2618 assertions)
 
 $ bash scripts/concurrency-check.sh        # real parallel processes against MySQL
 Result: 7 passed, 0 failed
@@ -99,6 +99,7 @@ Reminders, hold expiry and no-show marking need the scheduler and a queue worker
 sail artisan schedule:work     # or a cron line running schedule:run every minute in production
 sail artisan queue:work        # sends the queued confirmation emails and reminders
 sail artisan branchbook:health # checks DB, queue, failed jobs, scheduler heartbeat and mail config
+sail artisan branchbook:anonymise-customers --dry-run   # preview the 24-month retention job
 ```
 
 ## Commands
@@ -115,16 +116,15 @@ sail artisan branchbook:health # checks DB, queue, failed jobs, scheduler heartb
 No Emirates ID, account or card numbers are ever collected (and the booking form says so). Phone numbers
 are encrypted at rest; email is the lookup key. OTP codes and manage-booking tokens are stored only as
 hashes; codes expire in 10 minutes and allow 5 attempts. Staff screens mask contact details by role.
-Queue and booking actions are written to an append-only audit log with no personal data. Public endpoints
+Queue and booking actions are written to an append-only audit log with no personal data; security events go to a separate log channel. Customers inactive for 24 months are anonymised by a scheduled job. Public endpoints
 are rate limited, and pages send CSP, X-Frame-Options, Referrer-Policy and Permissions-Policy headers.
 
 ## What I'd do next
 1. **Backpack admin panel** for branches, services, advisors, shifts and the audit log.
 2. **Reschedule** in the customer journey and the API.
-3. **Data retention job** that anonymises customers inactive for 24 months.
-4. **Arabic / RTL** with the layout already using logical CSS properties.
-5. Subtract advisor leave from utilisation capacity.
-6. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
+3. **Arabic / RTL** with the layout already using logical CSS properties.
+4. Subtract advisor leave from utilisation capacity.
+5. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
 
 ## Repository workflow
 `main` (releases) ← `develop` (integration) ← `feature/*` (one per phase), merged by pull request with CI
