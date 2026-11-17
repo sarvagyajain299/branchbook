@@ -374,3 +374,59 @@ Each token carries only the abilities of its role (a front desk token has `queue
 
 **Q3. How do you keep the API and the website from drifting apart?**
 Controllers on both sides are thin and call the same Action classes. Business rules such as "hold the slot under a row lock" or "call next skips locked tickets" exist once. The API only adds transport concerns: JSON resources, token headers and status codes. The Pest suite tests both entry points against the same behaviour.
+
+---
+
+## Phase 8 — Reports and exports (hand-written SQL)
+
+### What was built
+- `ReportService` with four raw-SQL reports using bound parameters: advisor utilisation per week (recursive CTE + `RANK() OVER`), no-show rate by branch x service x weekday, wait times (average and nearest-rank 90th percentile with `ROW_NUMBER()`/`COUNT() OVER`), and a peak-hours heatmap.
+- The no-show report written a second time with the query builder, plus a test proving both return identical rows.
+- An admin **Reports** page (`/admin/reports`) with date-range and branch filters, three Chart.js charts, accessible tables, and a heatmap grid.
+- Streamed CSV exports for each report and for appointments (`/admin/reports/export/{report}`).
+- Access: HQ sees every branch; a branch manager is confined to their own branch (asking for another branch is a 403); front desk and advisors get 403.
+
+### The queries, explained
+1. **Utilisation.** `days` is a recursive CTE producing one row per calendar day. `capacity` joins each day to the advisors' weekly shifts (`s.weekday = WEEKDAY(d) + 1`, because MySQL numbers Monday as 0) and drops holiday days with a `LEFT JOIN closures ... WHERE c.id IS NULL`, then sums shift minutes per advisor and ISO week. `booked` sums appointment minutes for active or completed appointments. The final `SELECT` divides and ranks with `RANK() OVER (PARTITION BY branch_id, iso_week ORDER BY utilisation DESC)`: the partition restarts the ranking in every branch and week, and ties share a rank (1, 1, 3). Limitation: advisor leave is not subtracted.
+2. **No-show rate.** `JOIN` appointments to branches and services, filter to outcomes that mean something (`completed` or `no_show`; cancelled and future appointments are excluded), `GROUP BY branch, service, weekday`, and `SUM(status = 'no_show') / COUNT(*)`. MySQL treats a comparison as 0 or 1, so the `SUM` counts matches.
+3. **Wait times and the percentile.** MySQL has no `PERCENTILE_CONT`. Nearest-rank method: number each group's waits 1..n in ascending order with `ROW_NUMBER()`, take `n` with `COUNT(*) OVER`, and the p90 is the wait at position `CEIL(0.9 * n)`, selected with `MIN(CASE WHEN rn >= CEIL(0.9 * n) THEN wait END)`. For 4 walk-ins waiting 2, 4, 6 and 100 minutes the p90 is the 4th value, 100; for 10 waits of 1..10 it is the 9th, 9.
+4. **Heatmap.** Count tickets grouped by Dubai weekday and hour.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Raw SQL with bound parameters | Window functions and CTEs read better as SQL than as builder chains, and the SQL shows exactly what the database does. Every value is bound, never concatenated, so there is no SQL injection. |
+| Unique parameter names in one statement | PDO's native prepared statements reject a repeated named parameter (`:branch` used twice), so each use has its own name. |
+| `CONVERT_TZ(x, '+00:00', '+04:00')` | Data is stored in UTC but reports are about Dubai days and hours; the UAE has no daylight saving so a fixed offset works without MySQL's timezone tables. A test pins the midnight boundary: a ticket at 20:30 UTC counts as 00:30 Monday in Dubai, one at 19:30 UTC as Sunday. |
+| `GROUP BY` the select alias | `ONLY_FULL_GROUP_BY` cannot prove `WEEKDAY(x) + 1` depends on `GROUP BY WEEKDAY(x)`; grouping by the alias fixes it. My first version failed here and the tests caught it. |
+| Filter in UTC, display in Dubai | Date filters are converted to UTC bounds once (`ReportFilters`), so the `WHERE` clause compares raw column values and can use an index. |
+| `streamDownload` + `lazy(500)` | Rows are fetched 500 at a time and written one by one, so memory stays flat for any number of appointments. |
+| CSV cell sanitising | A cell starting with `=`, `+`, `-` or `@` is prefixed with an apostrophe, so spreadsheet software won't run it as a formula (CSV injection). Contact details are never exported. |
+| Chart data in a `<script type="application/json">` tag, encoded with `JSON_HEX_TAG` | Browsers never execute it (CSP-friendly), and `</script>` inside a name can't break out; a test checks it. |
+| Chart.js loaded with a dynamic `import()` | A separate 204 KB file is downloaded only on the reports page. |
+| Tables beside every chart | The table is the accessible version of the same data. |
+
+### EXPLAIN evidence (real runs, MySQL 8.0, seeded data)
+- **No-show report** on the 151-row demo set: `type: ALL`. With so few rows the optimiser rightly prefers a full scan; `appointments_status_starts_at_index` and `appointments_branch_id_starts_at_index` appear in `possible_keys` and are what a large table would use.
+- **Wait-time / heatmap filter** on 60,132 tickets, 30-day range (5,246 matching rows), statistics refreshed with `ANALYZE TABLE`:
+
+| | `type` | `key` | rows examined |
+|---|---|---|---|
+| Before | `ALL` | none | 59,996 |
+| After adding index `(issued_at, branch_id)` | `range` | `queue_tickets_issued_at_branch_id_index` | 5,246 |
+
+  Timings were not used as evidence: with this data size the command start-up dominates. The index puts the range column (`issued_at`) first and the optional equality filter (`branch_id`) second.
+
+### Raw SQL vs query builder (no-show report)
+Both return identical rows (tested). The builder version still needs `selectRaw` and an interpolated expression for `WEEKDAY(CONVERT_TZ(...))`, `SUM(status = 'no_show')` and `ROUND(...)`, so most of the logic ends up as SQL strings inside PHP anyway; only the joins and `WHERE` clauses become more readable. For the utilisation and wait-time reports the builder can't express CTEs or window functions at all without raw fragments. Rule of thumb used here: builder for simple filtered lists, raw SQL when the query is a report.
+
+### Likely interview questions
+
+**Q1. How did you compute a 90th percentile in MySQL?**
+MySQL has no percentile function, so I use the nearest-rank method with window functions. `ROW_NUMBER() OVER (PARTITION BY group ORDER BY wait)` numbers each group's waits in ascending order and `COUNT(*) OVER (PARTITION BY group)` gives the group size n. The 90th percentile is the wait at position `CEIL(0.9 * n)`, picked with `MIN(CASE WHEN rn >= CEIL(0.9 * n) THEN wait END)`. For waits of 1 to 10 minutes that is the 9th value, 9. I verified it with hand-calculated data in a test.
+
+**Q2. What does `RANK() OVER (PARTITION BY ...)` do in your utilisation report?**
+`PARTITION BY branch_id, iso_week` splits the result into independent groups, one per branch and week, and `ORDER BY utilisation DESC` ranks the advisors inside each group, so the best advisor of every branch gets 1. Unlike a `GROUP BY`, a window function keeps every row. `RANK` gives ties the same number and skips the next (1, 1, 3); `DENSE_RANK` would not skip.
+
+**Q3. You added an index. How do you know it helps?**
+I compared `EXPLAIN` before and after on 60,000 tickets after refreshing statistics with `ANALYZE TABLE`. Before: `type: ALL`, about 60,000 rows examined. After adding `(issued_at, branch_id)`: `type: range` using the new index and 5,246 rows examined, exactly the number of matching rows. I also noted that on the 150-row demo data MySQL correctly ignores indexes, so plan checks need realistic row counts.

@@ -25,7 +25,8 @@ next customer, and a waiting-room screen shows who goes to which desk.
 | Waiting-room display (public, no personal data, optional chime) | Done |
 | Audit log (append-only), security headers, health command | Done |
 | REST API `/api/v1` (Sanctum tokens with per-role abilities, OpenAPI spec, Postman collection) | Done, see [`docs/openapi.yaml`](docs/openapi.yaml) |
-| Backpack admin panel, SQL reports with CSV export, reschedule, Arabic/RTL | **Not built yet** (see "What I'd do next") |
+| Reports (raw SQL: window functions, recursive CTE, P90), Chart.js charts and streamed CSV exports at `/admin/reports` | Done |
+| Backpack admin panel, reschedule, data-retention job, Arabic/RTL | **Not built yet** (see "What I'd do next") |
 
 ## Stack
 Laravel 13 · PHP 8.3 · MySQL 8.0 · Laravel Sail (Docker) · Blade + Tailwind + small vanilla JS ·
@@ -37,7 +38,7 @@ Breeze (staff login) · Pest 4 · Pint · Larastan level 6 · GitHub Actions.
 $ sail composer ci
 pint --test      -> PASS
 phpstan (lvl 6)  -> [OK] No errors
-pest             -> Tests: 347 passed (2434 assertions)
+pest             -> Tests: 370 passed (2570 assertions)
 
 $ bash scripts/concurrency-check.sh        # real parallel processes against MySQL
 Result: 7 passed, 0 failed
@@ -75,6 +76,7 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/htm
 | Mailpit (all outgoing mail, including codes) | http://localhost:8026 |
 | Health check | http://localhost/up |
 | API (see `docs/openapi.yaml`) | http://localhost/api/v1/branches |
+| Reports (log in as HQ or a manager) | http://localhost/admin/reports |
 
 Tip: `alias sail='./vendor/bin/sail'`. If port 80, 3306 or 8026 is taken, change `APP_PORT`,
 `FORWARD_DB_PORT` or `FORWARD_MAILPIT_DASHBOARD_PORT` in `.env`.
@@ -117,11 +119,11 @@ Queue and booking actions are written to an append-only audit log with no person
 are rate limited, and pages send CSP, X-Frame-Options, Referrer-Policy and Permissions-Policy headers.
 
 ## What I'd do next
-1. **Reports** written as raw SQL with window functions and percentiles, Chart.js charts and streamed CSV exports.
-2. **Backpack admin panel** for branches, services, advisors, shifts and the audit log.
-3. **Reschedule** in the customer journey and the API.
-4. **Data retention job** that anonymises customers inactive for 24 months.
-5. **Arabic / RTL** with the layout already using logical CSS properties.
+1. **Backpack admin panel** for branches, services, advisors, shifts and the audit log.
+2. **Reschedule** in the customer journey and the API.
+3. **Data retention job** that anonymises customers inactive for 24 months.
+4. **Arabic / RTL** with the layout already using logical CSS properties.
+5. Subtract advisor leave from utilisation capacity.
 6. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
 
 ## Repository workflow

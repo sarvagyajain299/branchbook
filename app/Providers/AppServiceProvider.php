@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Enums\Role;
+use App\Models\User;
 use App\Services\Assignment\AdvisorAssignmentStrategy;
 use App\Services\Assignment\LeastBookedTodayStrategy;
 use App\Services\Assignment\RandomStrategy;
@@ -13,6 +15,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -51,6 +54,9 @@ class AppServiceProvider extends ServiceProvider
         // a CarbonImmutable. Mutable dates are a classic slot-calculation bug:
         // $start->addMinutes(30) would silently change $start as well.
         Date::use(CarbonImmutable::class);
+
+        // Reports: HQ and branch managers only (managers are confined to their own branch in ReportRequest).
+        Gate::define('view-reports', fn (User $user): bool => in_array($user->role, [Role::HqAdmin, Role::BranchManager], true));
 
         // In production, refuse `migrate:fresh`, `migrate:refresh`, `migrate:reset`
         // and `db:wipe`. They drop every table; typed into the wrong terminal on
