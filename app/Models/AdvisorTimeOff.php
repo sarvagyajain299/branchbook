@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Database\Factories\AdvisorTimeOffFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property CarbonImmutable $starts_at
+ * @property CarbonImmutable $ends_at
+ */
 class AdvisorTimeOff extends Model
 {
     /** @use HasFactory<AdvisorTimeOffFactory> */

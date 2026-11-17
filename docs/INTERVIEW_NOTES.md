@@ -149,3 +149,51 @@ They protect different things. A policy decides whether this user may act on thi
 
 **Q3. Why isn't `status` in `$fillable`?**
 Mass assignment is the classic privilege-escalation hole: any field the user can post becomes writable. Status is a state machine, so the only legal way to change it is `transitionTo()`, which checks the allowed transitions and throws `InvalidStatusTransition` otherwise. Keeping it out of `$fillable` means a bug or a crafted request can't move a completed appointment back to held. The same applies to `role` and `branch_id` on users.
+
+---
+
+## Phase 3 — Availability engine
+
+### What was built
+- `AvailabilityService`: pure domain logic (no HTTP) that returns bookable `Slot`s for a branch, service and date (or a run of days), plus `freeAdvisorsAt()` for an exact start time.
+- `AdvisorAssignmentStrategy` interface with `LeastBookedTodayStrategy` (default) and `RandomStrategy`, bound in `AppServiceProvider` and switched with `ASSIGNMENT_STRATEGY`.
+- `AvailabilityCache` (60 s) with instant invalidation through an `AppointmentChanged` event and a `ForgetAvailabilityCache` listener.
+- 42 tests covering every edge case in the brief.
+
+### The algorithm
+1. Closed? A branch-specific or all-branch `closures` row for the date means no slots.
+2. Opening hours for the weekday, split into two windows around the break.
+3. Candidate advisors: active, at this branch, qualified for the service (one query, with shifts, leave and appointments eager loaded).
+4. Walk a 15-minute grid. A slot needs `duration + buffer` minutes and must fit inside one window (the last slot may end exactly at closing).
+5. An advisor is free when the slot is inside one of their shifts and overlaps neither leave nor an active appointment. An appointment also occupies its own buffer after it. A hold whose `hold_expires_at` has passed does not block, even if the scheduler has not marked it expired yet.
+6. Apply `min_notice_hours` and `max_days_ahead`.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| All comparisons use UNIX timestamps | A timestamp is an absolute instant. Comparing integers removes timezone and DST bugs from the overlap maths. Wall-clock times (opening hours, shifts) are converted once. |
+| Overlap test `busyStart < end && busyEnd > start` | Two intervals overlap exactly when each starts before the other ends. Touching intervals (one ends 09:00, the next starts 09:00) correctly do not overlap. |
+| Minimum notice is applied after the cache | The cached list doesn't depend on "now", so a cached result can never let a too-soon slot through. |
+| Version number in the cache key instead of cache tags | Tags are not supported by the `database` cache driver. Bumping a per-(branch, date) version makes all old keys unreachable at once, on any driver. |
+| Event + listener instead of clearing the cache inside the model | The model only announces "this changed"; what to do about it lives in one listener. Later features (audit log, notifications) can listen too. |
+| `freeAdvisorsAt()` is uncached | A booking decision must use fresh data; the cache is only for browsing. |
+| Slot end shows the meeting length, the buffer is reserved silently | Customers see "09:00-09:45"; the advisor's wrap-up time is protected without confusing the customer. |
+| Strategy pattern | Booking code depends on the `AdvisorAssignmentStrategy` interface, so the policy changes in config or in a test without touching booking code. |
+| Fixed query count | Everything is eager loaded; a test asserts at most 8 queries with 6 advisors, so the cost doesn't grow with advisor count. |
+
+### Concepts to know
+- **Strategy pattern + dependency injection:** the service container resolves an interface to a concrete class chosen in a service provider. Callers never use `new`.
+- **Events and listeners:** `AppointmentChanged::dispatch(...)` is fired from the model's `saved`/`deleted` hooks; Laravel auto-discovers `ForgetAvailabilityCache` from the type-hint on its `handle()` method.
+- **Eager loading with constraints:** `with(['shifts' => fn ($q) => $q->where('weekday', 1)])` loads only the rows needed, in one extra query per relation.
+- **Why caching needs invalidation:** a stale "slot is free" would let a customer start a booking that then fails. The cache is a speed-up; the database unique index and row lock remain the source of truth.
+
+### Likely interview questions
+
+**Q1. Walk me through how you calculate available slots.**
+Check closures and opening hours for the weekday, which gives one or two windows around the break. Load the qualified, active advisors at the branch with their shifts, leave and active appointments in a fixed number of queries. Step through a 15-minute grid; a slot needs duration plus buffer and must fit inside a window. An advisor counts as free if the slot is inside a shift and overlaps no leave or appointment, using the interval rule `startA < endB && endA > startB`. Then apply minimum notice and maximum days ahead. The result is a list of slots with the number of free advisors.
+
+**Q2. How does your caching stay correct?**
+Results are cached for 60 seconds per branch, service and date. Every cache key includes a version number for that branch and date. When an appointment is saved or deleted, an event fires and a listener bumps the version, so the next request recomputes. A rescheduled appointment clears both the old and the new date. Changes to shifts or leave are not announced, so they wait out the 60-second TTL, which is acceptable for browsing. Booking never trusts the cache: it re-checks with `freeAdvisorsAt()` inside a transaction.
+
+**Q3. Why an interface for advisor assignment?**
+Different branches may want different policies, such as balancing workload, rotating, or preferring a named advisor. With an `AdvisorAssignmentStrategy` interface, the booking action asks the container for "an assignment strategy" and gets whichever is configured. Adding a policy means adding a class and one line in the provider. Tests can also bind a fake that returns a chosen advisor, which makes booking tests deterministic.

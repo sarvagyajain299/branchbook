@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\AppointmentChannel;
 use App\Enums\AppointmentStatus;
 use App\Enums\Role;
+use App\Events\AppointmentChanged;
 use App\Exceptions\InvalidStatusTransition;
 use Carbon\CarbonImmutable;
 use Database\Factories\AppointmentFactory;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property AppointmentChannel $channel
  * @property CarbonImmutable $starts_at
  * @property CarbonImmutable $ends_at
+ * @property CarbonImmutable|null $hold_expires_at
  */
 class Appointment extends Model
 {
@@ -50,6 +52,37 @@ class Appointment extends Model
             'status' => AppointmentStatus::class,
             'channel' => AppointmentChannel::class,
         ];
+    }
+
+    /** Local date the appointment had before a reschedule; used to clear the old day's cache too. */
+    private ?string $previousSlotDate = null;
+
+    protected static function booted(): void
+    {
+        static::updating(static function (self $appointment): void {
+            if ($appointment->isDirty('starts_at')) {
+                $appointment->previousSlotDate = self::localDate($appointment->getOriginal('starts_at'));
+            }
+        });
+
+        $announce = static function (self $appointment): void {
+            $dates = [self::localDate($appointment->starts_at)];
+
+            if ($appointment->previousSlotDate !== null) {
+                $dates[] = $appointment->previousSlotDate;
+                $appointment->previousSlotDate = null;
+            }
+
+            AppointmentChanged::dispatch($appointment->branch_id, $dates);
+        };
+
+        static::saved($announce);
+        static::deleted($announce);
+    }
+
+    private static function localDate(mixed $instant): string
+    {
+        return CarbonImmutable::parse($instant)->setTimezone((string) config('app.display_timezone'))->toDateString();
     }
 
     /**

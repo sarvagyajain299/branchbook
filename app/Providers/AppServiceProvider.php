@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Services\Assignment\AdvisorAssignmentStrategy;
+use App\Services\Assignment\LeastBookedTodayStrategy;
+use App\Services\Assignment\RandomStrategy;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
@@ -17,7 +20,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Dependency injection in action: anything that type-hints AdvisorAssignmentStrategy
+        // receives whichever implementation config chooses. Swap it with ASSIGNMENT_STRATEGY.
+        $this->app->bind(AdvisorAssignmentStrategy::class, fn (): AdvisorAssignmentStrategy => match (config('branchbook.assignment_strategy')) {
+            'random' => new RandomStrategy,
+            default => new LeastBookedTodayStrategy,
+        });
     }
 
     /**
