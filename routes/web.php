@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Booking\BookingController;
 use App\Http\Controllers\Booking\ManageBookingController;
 use App\Http\Controllers\Booking\VerificationController;
@@ -39,6 +40,12 @@ Route::withoutScopedBindings()->group(function (): void {
 });
 
 // ---- Staff area ---------------------------------------------------------------------------
+Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function (): void {
+    Route::get('reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('reports/export/{report}', [ReportController::class, 'csv'])
+        ->where('report', 'utilisation|no-shows|wait-times|heatmap|appointments')->name('reports.csv');
+});
+
 Route::middleware(['auth', 'verified'])->prefix('branch/{branch:code}')->group(function (): void {
     Route::get('desk', [FrontDeskController::class, 'index'])->name('desk');
     Route::post('desk/check-in/{appointment}', [FrontDeskController::class, 'checkIn'])->name('desk.check-in');

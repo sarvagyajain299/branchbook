@@ -12,6 +12,10 @@
         <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6 lg:px-8">
             <p class="text-gray-700">Signed in as <strong>{{ $user->name }}</strong> ({{ $user->role->label() }}).</p>
 
+            @can('view-reports')
+                <p><a class="inline-block rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800" href="{{ route('admin.reports') }}">Reports and exports</a></p>
+            @endcan
+
             <ul class="grid gap-4 sm:grid-cols-2">
                 @foreach ($branches as $branch)
                     <li class="rounded-lg bg-white p-5 shadow-sm">

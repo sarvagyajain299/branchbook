@@ -60,5 +60,14 @@ and `sail artisan schedule:work` running in two terminals, and Mailpit open at h
 | 32 | `sail artisan branchbook:health` | OK for DB/queue/mail; scheduler OK only while `schedule:work` runs | auto + browser/terminal |
 | 33 | Audit log after the steps above | Rows for check-in, call, start, complete, login, cancellation; no names or emails | auto |
 
-## E. Not built yet (cannot be QA'd)
-Backpack admin, REST API, SQL reports and CSV export, reschedule, "nearest branch", data-retention job, Arabic/RTL.
+## E. Reports and API
+
+| # | Step | Expected | Status |
+|---|---|---|---|
+| 34 | Log in as HQ, open **Reports and exports** | Four tables, three charts, heatmap, filters | auto + HTTP (charts not looked at by eye: **TO RUN**) |
+| 35 | Log in as `manager.dxb@northwind.test`, open Reports | Only Dubai data; `?branch=AUH-COR` gives 403 | auto |
+| 36 | Click each **Download CSV** | `text/csv` files that open in Excel/Sheets; text starting with `=` is neutralised | auto + HTTP; **TO RUN** (open in a spreadsheet) |
+| 37 | Run the Postman collection in `docs/api` | Booking and staff flows succeed in order | **TO RUN** (API behaviour is covered by 34 automated tests) |
+
+## F. Not built yet (cannot be QA'd)
+Backpack admin, reschedule, data-retention job, Arabic/RTL.
