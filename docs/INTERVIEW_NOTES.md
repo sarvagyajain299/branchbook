@@ -34,7 +34,12 @@ is likely to ask. Read these out loud before an interview; if you can't explain 
 | `User implements MustVerifyEmail` | Staff get access to customer data. Verifying the email proves the account owner controls the address before any authenticated page loads (`verified` middleware). |
 
 **Real results at the end of Phase 0** (`sail composer ci`): Pint clean, Larastan level 6 `[OK] No errors`,
-Pest `29 passed, 1 todo (67 assertions)`.
+Pest `30 passed (70 assertions)`.
+
+| Decision | Why |
+|---|---|
+| `DB::prohibitDestructiveCommands()` in production | `migrate:fresh` / `db:wipe` drop every table. One mistyped command on the live server would delete all bookings; the framework now refuses to run them when `APP_ENV=production`. |
+| Login page test asserts the `<title>` and form `action` | Catches a wrong `APP_NAME` and a renamed `login` route. `escape: false` because we match raw HTML. |
 
 ### Time: store UTC, display Dubai
 - The brief says "the app timezone is Asia/Dubai, store datetimes in UTC". In Laravel those are two

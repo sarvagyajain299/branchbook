@@ -32,17 +32,19 @@ No domain code yet; that starts in Phase 1.
 $ sail composer ci
 pint --test                      -> exit 0
 phpstan analyse (level 6)        -> [OK] No errors
-artisan test                     -> Tests: 1 todo, 29 passed (67 assertions), 2.47s
+artisan test                     -> Tests: 30 passed (70 assertions), 4.76s
 ```
 Versions: PHP 8.3.36, Laravel 13.43.0, MySQL 8.0.46, Pest 4.7.8, Larastan 3.15.0, Breeze 2.4.2.
 Coverage isn't measured yet: the Sail image has no Xdebug/PCOV enabled. It gets added when there's
 domain code worth measuring.
 
-## Your tasks before merge — `TODO(sarvagya)`
-1. `tests/Feature/StaffLoginPageTest.php`: write the login-page test and remove `->todo()`.
-2. `app/Providers/AppServiceProvider.php`: block destructive Artisan commands in production.
+## Learning tasks (`TODO(sarvagya)`) — done
+1. `tests/Feature/StaffLoginPageTest.php` checks the login page returns 200, has `<title>BranchBook</title>`,
+   and the form posts to `route('login')`.
+2. `AppServiceProvider` calls `DB::prohibitDestructiveCommands($this->app->isProduction())`, so
+   `migrate:fresh`, `migrate:refresh`, `migrate:reset` and `db:wipe` refuse to run in production.
 
-Then run `sail composer ci`. It must be green with **30 passed, 0 todo**.
+Be ready to explain both lines in review.
 
 ## How to test
 1. `cd ~/code/branchbook && sail up -d`
