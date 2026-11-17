@@ -12,6 +12,7 @@ use App\Mail\BookingConfirmedMail;
 use App\Models\Appointment;
 use App\Services\ManageToken;
 use App\Services\OtpService;
+use App\Support\Audit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -60,6 +61,8 @@ final class VerifyBooking
             $appointment->transitionTo(AppointmentStatus::Confirmed);
 
             $appointment->customer->forceFill(['email_verified_at' => $now, 'last_activity_at' => $now])->save();
+
+            Audit::record('appointment.confirmed', $appointment, ['by' => 'customer', 'status' => ['held', 'confirmed']]);
         });
 
         Mail::to($appointment->customer->email)->send(new BookingConfirmedMail($appointment, $token));

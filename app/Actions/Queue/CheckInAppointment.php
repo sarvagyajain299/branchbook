@@ -8,6 +8,7 @@ use App\Enums\AppointmentStatus;
 use App\Exceptions\QueueActionNotAllowed;
 use App\Models\Appointment;
 use App\Models\QueueTicket;
+use App\Support\Audit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -35,8 +36,11 @@ final class CheckInAppointment
             }
 
             $locked->transitionTo(AppointmentStatus::CheckedIn);
+            $ticket = $this->issue->handle($locked->branch, $locked->service, $locked, null, $now);
 
-            return $this->issue->handle($locked->branch, $locked->service, $locked, null, $now);
+            Audit::record('appointment.checked_in', $locked, ['status' => ['confirmed', 'checked_in'], 'ticket' => $ticket->display_code]);
+
+            return $ticket;
         });
     }
 }
