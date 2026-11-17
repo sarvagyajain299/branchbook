@@ -246,3 +246,51 @@ The link contains a 40-character random token. Only its SHA-256 hash is stored, 
 
 **Q3. How do you make the reminder job safe to retry?**
 The job starts with one atomic `UPDATE appointments SET reminder_sent_at = now() WHERE id = ? AND status = 'confirmed' AND reminder_sent_at IS NULL`. Only the run that changes a row proceeds to send; a duplicate or retried job changes zero rows and returns. If the provider call throws, the job clears `reminder_sent_at` and rethrows, so the queue's retry can send. The trade-off is at-most-once if the process dies between claiming and sending, which is acceptable for reminders.
+
+---
+
+## Phase 6 — Branch-day operations: front desk, queue, waiting-room display
+
+### What was built
+- **Front desk** `/branch/{code}/desk`: today's appointments with check-in buttons, a walk-in form, and the waiting list. Contact details are masked.
+- **Advisor desk** `/branch/{code}/my-desk`: Call next, Start, Complete, No-show, Recall.
+- **Waiting-room display** `/display/{code}` (public, no personal data) polling `/display/{code}/state` every 4 seconds, with an optional chime.
+- Actions: `IssueQueueTicket`, `CheckInAppointment`, `IssueWalkInTicket`, `CallNextTicket`, `ProgressTicket`.
+- Every ticket records `issued_at`, `called_at`, `served_at`, `completed_at` (plus `recalled_at`), which Phase 8's wait-time reports will use.
+- `scripts/concurrency-check.sh`: a real parallel test against MySQL (see below).
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Numbering: lock the **branch row**, then `MAX(sequence)+1` | Serialises ticket issue per branch (low volume at a front desk), needs no extra counter table that could drift, and the unique index `(branch, day, prefix, sequence)` is the safety net with a small retry. Alternatives: a counter row (extra table) or insert-and-retry on unique violations alone (wasted work under load). |
+| Day boundary is midnight **branch** time | A ticket issued at 00:01 Dubai (20:01 UTC) belongs to the new day. A test pins this. |
+| Call next: lock the advisor row first, then lock **one ticket by primary key** with `FOR UPDATE SKIP LOCKED` | Guarantees two advisors never get the same customer *and* nobody is told "nobody waiting" while customers wait. |
+| Priority: due appointments (earliest appointment time first), then walk-ins FIFO | Customers who booked get their slot; early arrivals wait until their time; walk-ins fill the gaps. |
+| `recalled_at` instead of rewriting `called_at` | Wait-time reports must measure the FIRST call. The display orders by `COALESCE(recalled_at, called_at)` and builds a changing `key` so the screen chimes again on a recall. |
+| Display shows only ticket code and desk | The TV is public (no login), so it must never carry names or appointment details. |
+| Polling every 4 s, not websockets | One request per screen per 4 seconds is negligible load and needs no extra service. Laravel Reverb would push changes instantly but adds a long-running process to deploy and monitor. Polling is the right first step; Reverb the upgrade if latency matters. |
+| Front desk sees masked contact details | Role-based minimum data: the desk needs to recognise the customer, not to read their phone number. |
+| Controller checks policy **and** branch match | A ticket or appointment id from another branch placed in this branch's URL returns 404; a wrong role or branch returns 403. |
+
+### A bug the real concurrency test found
+The first version used `ORDER BY ... LIMIT 1 FOR UPDATE SKIP LOCKED` on the waiting tickets. All 301 Pest tests passed, but running three advisors in parallel against MySQL, some advisors were told "nobody is waiting" while 27 customers waited. MySQL locks **every row it scans** for that query (sorting and LIMIT happen after the scan), so the first advisor locked the whole queue and the others skipped everything. Nobody got a duplicate, but the feature was wrong. The fix selects candidate ids with a plain read and then locks one row at a time by primary key. Pest wraps each test in one transaction, so it can never reproduce this; the parallel script can.
+
+Latest results of `scripts/concurrency-check.sh`: ticket numbering (8 simultaneous desks, 3 rounds) all unique and gapless; call next (3 advisors at once, 3 rounds) 3 different tickets each time; booking (6 customers, 1 slot, 3 free advisors) exactly 3 booked with 3 distinct advisors and 3 told "taken".
+
+### Concepts to know
+- **Pessimistic locking:** `lockForUpdate()` = `SELECT ... FOR UPDATE`; `SKIP LOCKED` lets a second transaction pass over rows the first holds.
+- **InnoDB locking reads lock what they scan**, not only what they return; lock by primary key to lock precisely.
+- **Snapshot isolation:** a transaction's consistent snapshot starts at its first plain read, so take the lock first and read after.
+- **Policies vs route model binding:** `{branch:code}` plus `abort_unless($ticket->branch_id === $branch->id, 404)` stops id-swapping across branches.
+- **Polling vs websockets:** trade complexity for latency.
+
+### Likely interview questions
+
+**Q1. Two advisors press "Call next" at the same instant. How do you make sure they don't get the same customer?**
+Each call runs in a transaction whose first statement locks that advisor's row. Candidate tickets are chosen with a plain ordered read, then each candidate is locked individually by primary key with `FOR UPDATE SKIP LOCKED`, re-checking that its status is still waiting. If the first advisor holds ticket 1, the second skips it and locks ticket 2. I verified this with parallel PHP processes against MySQL, and that test found a bug in my first version where a single `LIMIT 1 FOR UPDATE SKIP LOCKED` query locked the whole queue.
+
+**Q2. How are ticket numbers generated so they reset daily and never repeat?**
+Inside a transaction I lock the branch row, then take `MAX(sequence) + 1` for that branch, local date and service prefix. The lock serialises ticket issue per branch, and a unique index on branch, day, prefix and sequence guarantees no duplicate even if the lock logic had a bug; a collision is retried. The day is the branch-local date, so a ticket issued at 00:01 Dubai time starts the new day even though UTC is still the previous day.
+
+**Q3. Why does the waiting-room screen poll instead of using websockets?**
+At one small JSON request every few seconds per screen the server load is trivial, and it needs no extra infrastructure. Websockets (Laravel Reverb) push updates instantly, but they add a long-running process, a port and monitoring. For a waiting room a 4-second delay is acceptable, so I chose polling and would move to Reverb only if the latency became a problem. The screen is public, so the endpoint returns only ticket codes and desk labels.
