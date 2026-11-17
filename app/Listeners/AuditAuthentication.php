@@ -7,6 +7,7 @@ namespace App\Listeners;
 use App\Support\Audit;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Log;
 
 /** Records staff logins and failed attempts. Laravel discovers the handle* methods by their type-hints. */
 final class AuditAuthentication
@@ -22,5 +23,7 @@ final class AuditAuthentication
         $email = mb_strtolower((string) ($event->credentials['email'] ?? ''));
 
         Audit::record('auth.failed', null, ['email_hash' => hash('sha256', $email)]);
+
+        Log::channel('security')->warning('Failed staff login', ['email_hash' => hash('sha256', $email)]);
     }
 }

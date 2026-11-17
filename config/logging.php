@@ -67,6 +67,17 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Security events (failed logins, OTP lockouts, token creation) go to their own rotating
+        // file, kept longer than the application log, so they can be shipped to a SIEM or reviewed
+        // without wading through everything else. Never put personal data in these entries.
+        'security' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/security.log'),
+            'level' => 'info',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
