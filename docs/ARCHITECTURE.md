@@ -4,7 +4,7 @@ BranchBook is a single Laravel 13 monolith. One codebase serves four kinds of tr
 pages, staff web screens (front desk, advisor desk, Backpack admin), a versioned REST API, and
 background work (queue worker + scheduler). Everything shares one MySQL 8.0 database.
 
-Diagrams are Mermaid, so they render directly in Bitbucket and in VS Code's Markdown preview.
+Diagrams are Mermaid, so they render directly on GitHub and in VS Code's Markdown preview.
 Items marked *(Phase N)* are planned for that phase and don't exist yet.
 
 ## 1. Components

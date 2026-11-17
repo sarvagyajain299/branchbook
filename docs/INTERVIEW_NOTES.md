@@ -11,7 +11,7 @@ is likely to ask. Read these out loud before an interview; if you can't explain 
 - A Laravel **13** app (latest stable on 2026-11-17, `laravel/framework` v13.43) on **PHP 8.3**, running in
   **Laravel Sail** (Docker) inside WSL2, with **MySQL 8.0** and **Mailpit**.
 - **Breeze (Blade)** for staff login, **Pest 4** for tests, **Pint** for code style, **Larastan level 6**
-  for static analysis, composer scripts that chain them, and **Bitbucket Pipelines** running all of it
+  for static analysis, composer scripts that chain them, and **GitHub Actions** running all of it
   against a MySQL 8.0 service container.
 - App-wide safety defaults: strict Eloquent outside production, `CarbonImmutable` as the default date
   class, UTC storage with an `Asia/Dubai` display timezone.

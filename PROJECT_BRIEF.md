@@ -4,6 +4,8 @@
 > *"Read PROJECT_BRIEF.md. Start in plan mode. Do Phase 0 only, then stop for my review."*
 > Run one phase at a time. Review, test and merge each phase's pull request before starting the next.
 
+> **Change (2026-11-17):** the remote is **GitHub** with **GitHub Actions** CI, replacing Bitbucket and Bitbucket Pipelines everywhere below.
+
 ---
 
 ## 1. Role and goal
@@ -25,7 +27,7 @@ Northwind Bank is a fictional brand. Do not use any real bank's name, logo, colo
 
 1. **Teaching mode.** I need to understand everything. After each phase, append a section to `docs/INTERVIEW_NOTES.md` covering: what was built, why each design decision was made, the Laravel and database concepts involved (for example the request lifecycle, service container and dependency injection, routing, middleware, controllers, Form Requests, Eloquent relationships, eager loading and N+1, migrations, transactions and row locks, queues, scheduler, policies, events/observers), and 3 likely interview questions with model answers. In each phase, leave 1–2 small, well-scoped tasks marked `// TODO(sarvagya):` with a hint, and ask me to implement them before you merge.
 2. **Plan before code.** At the start of each phase, give me a short plan (files, approach, risks) and wait for approval.
-3. **Git workflow on Bitbucket.** The remote is a **Bitbucket** repository. Never commit directly to `main`. Use `develop` as the integration branch and one feature branch per phase (`feature/phase-3-availability-engine`). Use Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`), with small commits whose messages explain *why*. At the end of each phase, write the pull request description in `docs/prs/phase-N.md` (summary, changes, test steps, risks, screenshots to take) so I can open the PR into `develop` and self-review it.
+3. **Git workflow on GitHub.** The remote is a **GitHub** repository. Never commit directly to `main`. Use `develop` as the integration branch and one feature branch per phase (`feature/phase-3-availability-engine`). Use Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`), with small commits whose messages explain *why*. At the end of each phase, write the pull request description in `docs/prs/phase-N.md` (summary, changes, test steps, risks, screenshots to take) so I can open the PR into `develop` and self-review it.
 4. **Standards.** PHP 8.3, latest stable Laravel (check and tell me which), `declare(strict_types=1)`, Laravel Pint, Larastan level 6+. Keep controllers thin. Business logic lives in **Action and Service classes**, with **DTOs** for structured input, **backed enums** for statuses and roles, **interfaces** where behaviour can vary (advisor assignment strategy, SMS driver), and **Policies** for authorization. No business logic in Blade views or Backpack controllers.
 5. **Security and privacy by design (it's a bank).** Validate every input with Form Requests. Use mass-assignment protection, CSRF on web routes, rate limiting on public endpoints and OTP, and constant-time comparison for codes and tokens. Store only **hashes** of OTP codes and manage-booking tokens. **Never collect** Emirates ID numbers, account numbers or card numbers: say so on the booking form. Encrypt the phone number at rest (Laravel `encrypted` cast) and explain the search trade-off. Mask customer contact details in staff UIs unless the role allows full view. Never log full PII or secrets.
 6. **Tests are part of done.** Use Pest (unit + feature), factories and seeders. A phase isn't done until its tests pass and Pint and Larastan are clean. Report **real** test counts and coverage from actual runs, with the command shown. Never invent numbers.
@@ -42,7 +44,7 @@ Northwind Bank is a fictional brand. Do not use any real bank's name, logo, colo
 - **Queues:** database driver, with failed-job handling. **Scheduler:** reminders, hold expiry, no-show marking, data retention.
 - **Calendar invites:** generate `.ics` files (`spatie/icalendar-generator` or hand-built, explaining the format).
 - **API docs:** OpenAPI 3 (`docs/openapi.yaml`, hand-written or generated with Scribe) plus a Bruno/Postman collection.
-- **Quality:** Pest, Pint, Larastan. CI on **Bitbucket Pipelines**.
+- **Quality:** Pest, Pint, Larastan. CI on **GitHub Actions**.
 
 ## 4. Domain model (MySQL)
 
@@ -77,8 +79,8 @@ Model relationships: Branch hasMany Advisors, BranchHours, Closures, Appointment
 
 ### Phase 0 — Project setup, conventions and CI
 - New Laravel app with Sail (MySQL, Mailpit), Breeze (Blade), Pest, Pint, Larastan, `.env.example`, `README.md` (setup in under 10 commands), `CLAUDE.md` (conventions), and `docs/ARCHITECTURE.md` with Mermaid diagrams of the customer booking flow, the branch-day flow (check-in → queue → call → serve), and the components (web, API, queue worker, scheduler, MySQL, mail).
-- `bitbucket-pipelines.yml`: on every PR and push, run `composer install`, Pint (test mode), Larastan and Pest against a **MySQL 8 service container**, with Composer caching.
-- **Done when:** the app boots in Sail, the pipeline config is valid (explain how to check it in Bitbucket), and one example Pest test passes.
+- `.github/workflows/ci.yml` (GitHub Actions): on every PR and push, run `composer install`, Pint (test mode), Larastan and Pest against a **MySQL 8 service container**, with Composer caching.
+- **Done when:** the app boots in Sail, the pipeline config is valid (explain how to check it on GitHub), and one example Pest test passes.
 
 ### Phase 1 — Domain model, enums and seed data
 - Migrations (including the generated column and unique index), models, casts (including `encrypted` for phone), backed enums with labels, relationships, factories.
@@ -179,8 +181,8 @@ Write these as **raw SQL with bound parameters** (`DB::select`) to show SQL skil
 - [ ] Versioned Sanctum REST API with OpenAPI spec and collection
 - [ ] Hand-written SQL reports (window function, percentile, heatmap) with `EXPLAIN`, Chart.js charts and streamed CSV exports
 - [ ] Privacy and security: no sensitive banking identifiers collected, encrypted phone, masking, audit log, retention job
-- [ ] Pest suite, Pint and Larastan clean, Bitbucket Pipelines green (real numbers recorded)
+- [ ] Pest suite, Pint and Larastan clean, GitHub Actions green (real numbers recorded)
 - [ ] Docs: README, ARCHITECTURE, openapi.yaml, QA, INTERVIEW_NOTES, CV_BULLETS, per-phase PR notes
-- [ ] Clean Bitbucket history: feature branches → PRs into `develop` → release merge to `main`
+- [ ] Clean GitHub history: feature branches → PRs into `develop` → release merge to `main`
 
 Deployment to a Linux VPS behind Cloudflare is handled by a separate prompt (`03-deploy-vps-cloudflare.md`). Keep all environment differences in `.env` so staging and production run the same code.

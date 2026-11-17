@@ -4,7 +4,7 @@
 
 ## Summary
 Bootstraps BranchBook: a Laravel 13.43 app on PHP 8.3 in Sail (MySQL 8.0, Mailpit), Breeze (Blade)
-staff auth, Pest 4, Pint, Larastan level 6, a Bitbucket Pipelines config, and the project docs.
+staff auth, Pest 4, Pint, Larastan level 6, a GitHub Actions CI workflow, and the project docs.
 No domain code yet; that starts in Phase 1.
 
 ## Changes
@@ -22,8 +22,10 @@ No domain code yet; that starts in Phase 1.
   `phpstan.neon` (level 6), composer scripts `lint`, `lint:check`, `stan`, `test`, `ci`.
 - **Tests:** `HealthCheckTest` (`/up`), `AppConfigTest` (UTC storage, Dubai display, immutable dates,
   UTC→Dubai conversion), plus Breeze's auth/profile tests. All run on MySQL `testing`, not SQLite.
-- **CI:** `bitbucket-pipelines.yml` runs composer install → npm build → Pint → Larastan → migrate →
-  Pest against a `mysql:8.0` service, on every PR and on pushes to `develop` and `main`.
+- **CI:** `.github/workflows/ci.yml` (GitHub Actions) runs composer install → npm build → Pint →
+  Larastan → migrate → Pest against a `mysql:8.0` service container, on every PR and on pushes to
+  `develop` and `main`. A newer push cancels the older run on the same branch.
+  (CI first ran on Bitbucket Pipelines, then moved to GitHub; the commit history shows both.)
 - **Docs:** `README.md`, `CLAUDE.md`, `AGENTS.md`, `PROJECT_BRIEF.md`, `docs/ARCHITECTURE.md`
   (3 Mermaid diagrams), `docs/INTERVIEW_NOTES.md` (Phase 0).
 
@@ -53,35 +55,20 @@ Be ready to explain both lines in review.
 4. Open http://localhost:8026 → the verification email is there; click the link → dashboard.
 5. `sail composer ci` → all green.
 
-## Push to Bitbucket (one-time)
-1. On bitbucket.org: **Create repository** → name `branchbook`, **no** README/.gitignore (keep it empty).
-2. Make sure WSL has an SSH key added to Bitbucket (Personal settings → SSH keys):
-   `ls ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519 -C "bitbucket"`, then paste
-   `cat ~/.ssh/id_ed25519.pub` into Bitbucket.
-3. Push all three branches:
-   ```bash
-   git remote add origin git@bitbucket.org:<workspace>/branchbook.git
-   git push -u origin main develop feature/phase-0-setup
-   ```
-4. Repository settings → Pipelines → **Settings** → enable Pipelines.
-5. Create the PR `feature/phase-0-setup` → `develop`, paste this file as the description.
-
-## Checking the pipeline config in Bitbucket
-- **Before pushing:** Bitbucket has an online `bitbucket-pipelines.yml` validator (search "Bitbucket
-  Pipelines validator"). Paste the file in; it checks structure and keywords.
-- **After pushing:** the PR page shows a Pipelines build. An invalid file fails immediately with a
-  "Configuration error" before any step runs; a valid one runs the `Lint, static analysis and tests`
-  step. Click it to see each command's log.
-- Locally we confirmed the YAML parses, has no tabs, and defines `pull-requests` plus
-  `develop`/`main` branch triggers.
+## Checking the CI workflow on GitHub
+- **On the PR:** the "Checks" section at the bottom shows `CI / Lint, static analysis and tests`.
+  Click **Details** to see each step's log.
+- **Invalid workflow file:** GitHub shows it in the **Actions** tab as a failed run with
+  "Invalid workflow file" and the exact line, before any step runs.
+- **Locally:** the YAML parses; triggers are `pull_request` plus pushes to `develop` and `main`.
+- **Recommended once merged:** Settings → Branches → add a rule for `develop` and `main` requiring
+  the `Lint, static analysis and tests` check, so nothing red can be merged.
 
 ## Risks / notes
 - **Public registration is still on** (Breeze default). Staff accounts should be created by admins only;
   Phase 2 removes `/register`.
-- **First pipeline run is slow** (~5–8 min): it installs PHP extensions and Node on `php:8.3-cli`.
-  A prebuilt CI image would cut that; noted for Phase 9.
-- **Bitbucket free plan** includes 50 build minutes/month. The `size: 2x` step uses minutes twice as
-  fast; drop to the default size if you hit the limit.
+- **Actions minutes:** unlimited for public repos; private repos on the free plan get 2,000
+  minutes/month. One run takes ~2–3 minutes with caches warm.
 - Breeze installs Tailwind **v3** (`tailwind.config.js`), replacing Laravel 13's default v4 setup.
   That's fine for now. Revisit if we need v4-only features.
 
@@ -90,4 +77,4 @@ Be ready to explain both lines in review.
 2. Breeze login page at http://localhost/login.
 3. Terminal output of `sail composer ci` (green).
 4. Mailpit inbox with the verification email.
-5. Bitbucket PR page with the green pipeline (after you push).
+5. GitHub PR page with the green CI check.

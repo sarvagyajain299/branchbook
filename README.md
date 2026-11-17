@@ -11,7 +11,7 @@ and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for diagrams.
 
 ## Stack
 Laravel 13 · PHP 8.3 · MySQL 8.0 · Laravel Sail (Docker) · Breeze (Blade + Tailwind) · Pest 4 ·
-Pint · Larastan level 6 · Bitbucket Pipelines.
+Pint · Larastan level 6 · GitHub Actions.
 
 ## Setup (Windows: run everything in a WSL2 Ubuntu terminal)
 
@@ -19,7 +19,7 @@ Requirements: Docker Desktop with WSL2 integration enabled, and git inside WSL.
 Clone into the Linux filesystem (`~/code`), **not** `/mnt/c/...`, or Docker will be very slow.
 
 ```bash
-git clone <your-bitbucket-url> ~/code/branchbook && cd ~/code/branchbook
+git clone https://github.com/Sarvagya534a/branchbook.git ~/code/branchbook && cd ~/code/branchbook
 cp .env.example .env
 docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/html \
   laravelsail/php83-composer:latest composer install --ignore-platform-reqs
