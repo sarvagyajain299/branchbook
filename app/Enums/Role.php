@@ -27,6 +27,20 @@ enum Role: string
         return $this !== self::HqAdmin;
     }
 
+    /**
+     * What an API token created by this role may do (Sanctum "abilities"). Least privilege:
+     * advisors run their own desk but cannot issue tickets; front desk issues but cannot call.
+     *
+     * @return list<string>
+     */
+    public function apiAbilities(): array
+    {
+        return match ($this) {
+            self::HqAdmin, self::BranchManager, self::FrontDesk => ['queue:read', 'queue:issue'],
+            self::Advisor => ['queue:read', 'queue:operate'],
+        };
+    }
+
     /** Whether this role may see a customer's full email and phone. */
     public function canRevealContactDetails(): bool
     {

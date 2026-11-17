@@ -13,6 +13,7 @@ use App\Http\Requests\Booking\StartBookingRequest;
 use App\Models\Branch;
 use App\Models\Service;
 use App\Services\Availability\AvailabilityService;
+use App\Services\Availability\WeekPayload;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -62,7 +63,7 @@ class BookingController extends Controller
     }
 
     /** JSON: a week of slots, loaded by the picker without a page reload. */
-    public function slots(Request $request, Service $service, Branch $branch): JsonResponse
+    public function slots(Request $request, Service $service, Branch $branch, WeekPayload $week): JsonResponse
     {
         $this->ensureBookable($service, $branch);
 
@@ -71,25 +72,10 @@ class BookingController extends Controller
             'days' => ['nullable', 'integer', 'between:1,14'],
         ]);
 
-        $tz = (string) config('app.display_timezone');
-        $today = CarbonImmutable::now($tz)->startOfDay();
-        $from = isset($validated['from']) ? CarbonImmutable::parse($validated['from'], $tz)->startOfDay() : $today;
-        $from = $from->lessThan($today) ? $today : $from;
-
-        $week = $this->availability->slotsForRange($branch, $service, $from->toDateString(), (int) ($validated['days'] ?? 7));
-
-        $days = [];
-        foreach ($week as $date => $slots) {
-            $days[] = [
-                'date' => $date,
-                'label' => CarbonImmutable::parse($date, $tz)->format('D j M'),
-                'slots' => array_map(fn (Slot $slot): array => $slot->toArray() + [
-                    'url' => route('book.details', ['service' => $service, 'branch' => $branch, 'starts_at' => $slot->startsAt->toIso8601ZuluString()]),
-                ], $slots),
-            ];
-        }
-
-        return response()->json(['from' => $from->toDateString(), 'days' => $days]);
+        return response()->json($week->build(
+            $branch, $service, $validated['from'] ?? null, (int) ($validated['days'] ?? 7),
+            fn (Slot $slot): string => route('book.details', ['service' => $service, 'branch' => $branch, 'starts_at' => $slot->startsAt->toIso8601ZuluString()]),
+        ));
     }
 
     /** Step 4: your details. */

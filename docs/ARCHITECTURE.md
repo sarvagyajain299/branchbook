@@ -5,7 +5,9 @@ pages, staff web screens (front desk, advisor desk, Backpack admin), a versioned
 background work (queue worker + scheduler). Everything shares one MySQL 8.0 database.
 
 Diagrams are Mermaid, so they render directly on GitHub and in VS Code's Markdown preview.
-Items marked *(Phase N)* are planned for that phase and don't exist yet.
+**Status.** Built: the web app (customer booking, staff screens, waiting-room display), the REST API
+(`/api/v1`), the queue worker, the scheduler, MySQL and mail. **Planned, not built yet:** the Backpack admin
+panel shown in the component diagram, and the reports.
 
 ## 1. Components
 
@@ -55,7 +57,7 @@ must be a single transaction.
 Why the database queue driver: no extra infrastructure (Redis is optional), jobs are visible with
 plain SQL, and failed jobs land in `failed_jobs` for retry.
 
-## 2. Customer booking flow *(Phase 3–4)*
+## 2. Customer booking flow
 
 ```mermaid
 sequenceDiagram
@@ -87,7 +89,7 @@ sequenceDiagram
     Note over Q: Scheduler: expire unverified holds every minute,<br/>reminder 24 h before, no-show 30 min after start
 ```
 
-## 3. Branch-day flow *(Phase 6)*
+## 3. Branch-day flow
 
 ```mermaid
 flowchart TD
