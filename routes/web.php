@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Http\Controllers\Booking\BookingController;
 use App\Http\Controllers\Booking\ManageBookingController;
 use App\Http\Controllers\Booking\VerificationController;
+use App\Http\Controllers\Branch\AdvisorDeskController;
+use App\Http\Controllers\Branch\DisplayController;
+use App\Http\Controllers\Branch\FrontDeskController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +39,23 @@ Route::withoutScopedBindings()->group(function (): void {
 });
 
 // ---- Staff area ---------------------------------------------------------------------------
+Route::middleware(['auth', 'verified'])->prefix('branch/{branch:code}')->group(function (): void {
+    Route::get('desk', [FrontDeskController::class, 'index'])->name('desk');
+    Route::post('desk/check-in/{appointment}', [FrontDeskController::class, 'checkIn'])->name('desk.check-in');
+    Route::post('desk/walk-in', [FrontDeskController::class, 'walkIn'])->name('desk.walk-in');
+
+    Route::get('my-desk', [AdvisorDeskController::class, 'index'])->name('my-desk');
+    Route::post('my-desk/call-next', [AdvisorDeskController::class, 'callNext'])->name('my-desk.call-next');
+    Route::post('my-desk/tickets/{ticket}/start', [AdvisorDeskController::class, 'start'])->name('my-desk.start');
+    Route::post('my-desk/tickets/{ticket}/complete', [AdvisorDeskController::class, 'complete'])->name('my-desk.complete');
+    Route::post('my-desk/tickets/{ticket}/no-show', [AdvisorDeskController::class, 'noShow'])->name('my-desk.no-show');
+    Route::post('my-desk/tickets/{ticket}/recall', [AdvisorDeskController::class, 'recall'])->name('my-desk.recall');
+});
+
+// Waiting-room TV: public, no personal data, polled every few seconds.
+Route::get('/display/{branch:code}', [DisplayController::class, 'show'])->name('display');
+Route::get('/display/{branch:code}/state', [DisplayController::class, 'state'])
+    ->middleware('throttle:120,1,display')->name('display.state');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

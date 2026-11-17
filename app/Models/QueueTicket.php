@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\TicketStatus;
 use App\Exceptions\InvalidStatusTransition;
+use Carbon\CarbonImmutable;
 use Database\Factories\QueueTicketFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property TicketStatus $status
+ * @property CarbonImmutable $issued_at
+ * @property CarbonImmutable|null $called_at
+ * @property CarbonImmutable|null $served_at
+ * @property CarbonImmutable|null $completed_at
+ * @property CarbonImmutable|null $recalled_at
+ * @property CarbonImmutable $service_date
  */
 class QueueTicket extends Model
 {
@@ -25,7 +32,7 @@ class QueueTicket extends Model
     protected $fillable = [
         'branch_id', 'service_date', 'service_id', 'queue_prefix', 'sequence', 'display_code',
         'appointment_id', 'issued_at', 'called_at', 'served_at', 'completed_at',
-        'advisor_id', 'desk_label',
+        'advisor_id', 'desk_label', 'walk_in_name', 'recalled_at',
     ];
 
     /** @return array<string, mixed> */
@@ -39,6 +46,7 @@ class QueueTicket extends Model
             'called_at' => 'immutable_datetime',
             'served_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
+            'recalled_at' => 'immutable_datetime',
         ];
     }
 

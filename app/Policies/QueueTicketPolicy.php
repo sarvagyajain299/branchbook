@@ -27,7 +27,13 @@ class QueueTicketPolicy
             && $user->canAccessBranch($branchId);
     }
 
-    /** Call next / start / complete / no-show: advisor desk work, at the advisor's own branch. */
+    /** Open the advisor desk and press "Call next": advisors, at their own branch only. */
+    public function callNext(User $user, int $branchId): bool
+    {
+        return $user->role === Role::Advisor && $user->branch_id === $branchId;
+    }
+
+    /** Start / complete / no-show / recall a specific ticket: advisor desk work, at the advisor's own branch. */
     public function operate(User $user, QueueTicket $ticket): bool
     {
         return $user->role === Role::Advisor && $user->branch_id === $ticket->branch_id;
