@@ -1,0 +1,445 @@
+openapi: 3.0.3
+info:
+  title: BranchBook API
+  version: 1.0.0
+  description: |
+    REST API for Northwind Bank (a fictional bank) branch appointments and queue operations.
+
+    **Auth.** Public endpoints need no credentials. Booking endpoints use the emailed one-time code
+    (to verify) and a secret *manage token* sent in the `X-Manage-Token` header (to view or cancel).
+    Staff endpoints use a Sanctum bearer token from `POST /auth/tokens`; its abilities depend on the role.
+
+    **Errors.** Every error is JSON with a `message`. Validation errors (422) add `errors`.
+    409 means the request was valid but conflicts with the current state (slot taken, too late to cancel,
+    ticket already handled).
+
+    **Time.** All instants are UTC ISO-8601 (`...Z`). `local_start` / `local_time` are Dubai time (Asia/Dubai).
+
+    **Rate limits.** Exceeding a limit returns 429.
+servers:
+  - url: http://localhost/api/v1
+tags:
+  - name: Public
+  - name: Bookings
+  - name: Staff
+paths:
+  /branches:
+    get:
+      tags: [Public]
+      summary: List active branches (nearest first when lat and lng are given)
+      description: Limit 60 requests/minute.
+      parameters:
+        - { name: city, in: query, schema: { type: string }, example: Dubai }
+        - { name: lat, in: query, schema: { type: number, minimum: -90, maximum: 90 }, description: Required together with lng }
+        - { name: lng, in: query, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: A page of branches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Branch' } }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /services:
+    get:
+      tags: [Public]
+      summary: List bookable services with their document checklists
+      responses:
+        '200':
+          description: A page of services
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Service' } }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /branches/{branch}/availability:
+    get:
+      tags: [Public]
+      summary: Bookable time slots for a service at a branch
+      parameters:
+        - { name: branch, in: path, required: true, schema: { type: string }, example: DXB-MAR }
+        - { name: service, in: query, required: true, schema: { type: string }, example: PAO }
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, example: '2026-12-07', description: Branch-local date }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 14, default: 1 } }
+      responses:
+        '200':
+          description: Slots per day (empty array for closed days)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        slots: { type: array, items: { $ref: '#/components/schemas/Slot' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /bookings:
+    post:
+      tags: [Bookings]
+      summary: Hold a slot for 10 minutes and email a 6-digit code
+      description: Limit 10 requests/minute. Never send card, account or Emirates ID numbers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingRequest' }
+      responses:
+        '201':
+          description: Held; a code was emailed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Appointment' }
+                  message: { type: string }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /bookings/{reference}/verify:
+    post:
+      tags: [Bookings]
+      summary: Confirm the booking with the emailed code
+      description: 5 wrong guesses lock the code. The manage token is returned once.
+      parameters:
+        - { $ref: '#/components/parameters/Reference' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$', example: '123456' }
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Appointment' }
+                  manage_token: { type: string, description: Shown only once; send it as X-Manage-Token }
+                  message: { type: string }
+        '409': { description: The booking is not waiting for verification, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '410': { description: The 10-minute hold has ended, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /bookings/{reference}:
+    get:
+      tags: [Bookings]
+      summary: View a booking
+      security: [{ manageToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Reference' }
+      responses:
+        '200':
+          description: The booking
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Appointment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Bookings]
+      summary: Cancel a booking (until 2 hours before it starts)
+      security: [{ manageToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Reference' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 255 }
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Appointment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/tokens:
+    post:
+      tags: [Staff]
+      summary: Exchange staff credentials for a bearer token
+      description: Limit 5 requests/minute. Abilities depend on the role (front desk, manager, HQ get queue:read and queue:issue; advisors get queue:read and queue:operate).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, device_name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                device_name: { type: string, maxLength: 60, example: Front desk tablet }
+      responses:
+        '201':
+          description: Token created (valid 12 hours)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  abilities: { type: array, items: { type: string } }
+                  expires_at: { type: string, format: date-time }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      role: { type: string, enum: [hq_admin, branch_manager, advisor, front_desk] }
+                      branch_id: { type: integer, nullable: true }
+        '401': { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/tokens/current:
+    delete:
+      tags: [Staff]
+      summary: Revoke the token used for this request
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Revoked }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /branches/{branch}/queue:
+    get:
+      tags: [Staff]
+      summary: Today's queue at a branch
+      description: Needs ability queue:read and access to that branch (403 otherwise).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: branch, in: path, required: true, schema: { type: string }, example: DXB-MAR }
+        - { name: status, in: query, schema: { type: string, enum: [waiting, called, serving, completed, no_show, cancelled] } }
+      responses:
+        '200':
+          description: A page of tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/QueueTicket' } }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /branches/{branch}/queue/walk-ins:
+    post:
+      tags: [Staff]
+      summary: Issue a walk-in ticket
+      description: Needs ability queue:issue and access to that branch.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: branch, in: path, required: true, schema: { type: string }, example: DXB-MAR }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service]
+              properties:
+                service: { type: string, example: PAO }
+                name: { type: string, maxLength: 60 }
+      responses:
+        '201':
+          description: Ticket issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/QueueTicket' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /queue/call-next:
+    post:
+      tags: [Staff]
+      summary: The authenticated advisor calls their next customer
+      description: Needs ability queue:operate. Two advisors calling at once never get the same customer.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The called ticket, or null when nobody is waiting
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { allOf: [{ $ref: '#/components/schemas/QueueTicket' }], nullable: true }
+                  message: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /queue-tickets/{id}:
+    patch:
+      tags: [Staff]
+      summary: Start, complete, no-show or recall a called ticket
+      description: Needs ability queue:operate; only the advisor who called the ticket may change it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [start, complete, no_show, recall] }
+      responses:
+        '200':
+          description: The updated ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/QueueTicket' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, description: Token from POST /auth/tokens }
+    manageToken: { type: apiKey, in: header, name: X-Manage-Token, description: The secret returned once by the verify endpoint }
+  parameters:
+    Reference:
+      name: reference
+      in: path
+      required: true
+      schema: { type: string }
+      example: NWB-7KQ4-P2XD
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              errors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthenticated: { description: Missing or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Token lacks the ability, or the branch is not yours, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Valid request that conflicts with the current state, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    TooManyRequests: { description: Rate limit exceeded, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: string, nullable: true }
+        last: { type: string, nullable: true }
+        prev: { type: string, nullable: true }
+        next: { type: string, nullable: true }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+    Branch:
+      type: object
+      properties:
+        code: { type: string, example: DXB-MAR }
+        name: { type: string }
+        city: { type: string }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        phone: { type: string }
+        distance_km: { type: number, description: Only when lat and lng were sent }
+    Service:
+      type: object
+      properties:
+        code: { type: string, example: PAO }
+        name: { type: string }
+        category: { type: string }
+        description: { type: string }
+        duration_minutes: { type: integer }
+        required_documents: { type: array, items: { type: string } }
+        min_notice_hours: { type: integer }
+        max_days_ahead: { type: integer }
+    Slot:
+      type: object
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        local_time: { type: string, example: '09:00' }
+        free_advisors: { type: integer }
+    BookingRequest:
+      type: object
+      required: [service, branch, starts_at, first_name, last_name, email, phone, consent]
+      properties:
+        service: { type: string, example: PAO }
+        branch: { type: string, example: DXB-MAR }
+        starts_at: { type: string, format: date-time, description: A slot's starts_at }
+        first_name: { type: string, maxLength: 80 }
+        last_name: { type: string, maxLength: 80 }
+        email: { type: string, format: email }
+        phone: { type: string, example: '050 123 4567', description: UAE mobile number }
+        consent: { type: boolean, enum: [true] }
+        marketing_opt_in: { type: boolean }
+    Appointment:
+      type: object
+      properties:
+        reference: { type: string, example: NWB-7KQ4-P2XD }
+        status: { type: string, enum: [held, confirmed, checked_in, in_service, completed, cancelled, no_show, expired] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        local_start: { type: string, example: '2026-12-07 09:00' }
+        timezone: { type: string, example: Asia/Dubai }
+        hold_expires_at: { type: string, format: date-time, nullable: true }
+        service: { type: object, properties: { code: { type: string }, name: { type: string } } }
+        branch: { type: object, properties: { code: { type: string }, name: { type: string }, address: { type: string } } }
+        required_documents: { type: array, items: { type: string } }
+    QueueTicket:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, example: A-042 }
+        status: { type: string, enum: [waiting, called, serving, completed, no_show, cancelled] }
+        service: { type: object, properties: { code: { type: string }, name: { type: string } } }
+        is_walk_in: { type: boolean }
+        desk: { type: string, nullable: true }
+        issued_at: { type: string, format: date-time }
+        called_at: { type: string, format: date-time, nullable: true }
+        served_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }

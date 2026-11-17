@@ -294,3 +294,83 @@ Inside a transaction I lock the branch row, then take `MAX(sequence) + 1` for th
 
 **Q3. Why does the waiting-room screen poll instead of using websockets?**
 At one small JSON request every few seconds per screen the server load is trivial, and it needs no extra infrastructure. Websockets (Laravel Reverb) push updates instantly, but they add a long-running process, a port and monitoring. For a waiting room a 4-second delay is acceptable, so I chose polling and would move to Reverb only if the latency became a problem. The screen is public, so the endpoint returns only ticket codes and desk labels.
+
+---
+
+## Phase 9 (partial) — Hardening, audit log, health check, release
+
+Scope note: audit logging, security headers, the health command and the docs are done. The data-retention job,
+separate security log channel and `composer audit` step were not built.
+
+### What was built
+- `Audit::record()` writes an append-only row from the **action** that did the work, inside the same transaction. Covered: check-in, walk-in, call, start, complete, no-show, recall, confirm, cancel, login, failed login.
+- `SecurityHeaders` middleware: `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, a Content-Security-Policy, and HSTS (off by default, only over HTTPS).
+- `branchbook:health` plus a scheduler heartbeat.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Audit from actions, not model observers | Actions know the actor, the intent ("checked in") and which data is safe to log. An observer only sees attribute changes and would have to guess. Writing inside the transaction means the log and the change commit or roll back together. |
+| Audit `changes` hold ids, codes, statuses, reasons only | Names, emails, phones and tokens are never logged. A test scans every log row for them. |
+| IP stored as `HMAC-SHA256(ip, APP_KEY)` | Entries from the same address can be matched without keeping a readable IP. |
+| Failed logins store a hash of the email | A password typed into the email box shouldn't land in a log in clear text. |
+| HSTS is opt-in (`ENABLE_HSTS`) | Browsers remember it for a year; turning it on before the site is permanently HTTPS breaks access. |
+| CSP is skipped when `public/hot` exists | The Vite dev server needs inline code and websockets. |
+| CSP allows `'unsafe-eval'` | The standard Alpine.js build used by Breeze's menus needs it. Switching to Alpine's CSP build would remove it; recorded in "What I'd do next". |
+| Health command distinguishes WARN from FAIL | A failed job in the last day is worth a look; a dead scheduler or a stuck queue means customers are not getting reminders. |
+
+### Likely interview questions
+
+**Q1. Why write the audit log from actions instead of model observers?**
+Observers fire on any model change, including seeders and internal housekeeping, and they only know that attributes changed, not why or who intended it. Actions represent business events such as "front desk checked in an appointment" and know the actor and which fields are safe to record. Doing it inside the action's transaction also guarantees the audit row and the change succeed or fail together.
+
+**Q2. What does your Content-Security-Policy do, and what is its weakness?**
+It tells the browser to load scripts, styles, fonts and connections only from our own origin (plus the font host), to submit forms only to us, and to refuse to be framed. That limits what an injected script could do. The weakness is `'unsafe-eval'`, needed by Alpine.js's standard build for Breeze menus. The fix is Alpine's CSP build.
+
+**Q3. How would you know in production that reminders have stopped?**
+The scheduler writes a heartbeat to the cache every minute, and `branchbook:health` fails if it is missing or older than five minutes. It also fails when the oldest queued job has waited more than ten minutes (worker stopped) and warns about failed jobs from the last 24 hours. Pointing an uptime monitor or cron at that command gives an alert before customers notice.
+
+---
+
+## Phase 7 — REST API (Sanctum)
+
+### What was built
+- Versioned API under `/api/v1` with 13 endpoints: public (branches with Haversine distance sort, services, availability), bookings (create, verify, view, cancel) and staff (tokens, queue list, walk-ins, call next, ticket updates).
+- JSON API Resources, pagination links and meta, one error shape, per-role token abilities, named rate limits.
+- Controllers contain no business logic: they call the **same Actions** as the website (`StartBooking`, `VerifyBooking`, `CancelBooking`, `IssueWalkInTicket`, `CallNextTicket`, `ProgressTicket`) and the same `AvailabilityService`.
+- `docs/openapi.yaml` (OpenAPI 3.0.3, 13 operations) and `docs/api/BranchBook.postman_collection.json` (15 requests with variables that chain together).
+- Reschedule (`PATCH /bookings/{reference}`) is not built.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Reuse the web Actions | One implementation of every rule. A fix to double-booking or call-next protects the website and the API at once, and the API cannot drift from the website. |
+| Token **abilities** for "what", **policies** for "where" | Abilities (`queue:read`, `queue:issue`, `queue:operate`) limit what a stolen token can do at all; policies still check that the user belongs to the branch. A front desk token cannot call customers even for its own branch. |
+| Abilities come from the role at token creation | The role-to-ability map lives in one place (`Role::apiAbilities()`), so a token never carries more than its user's role allows. Tokens expire after 12 hours. |
+| Unknown email and wrong password give the same 401, and both run one bcrypt check | Identical answers and similar timing stop attackers discovering which staff emails exist. |
+| Manage token in the `X-Manage-Token` **header**, not the URL | URLs end up in logs and browser history; headers don't. Wrong reference and wrong token both return the same 404. |
+| 409 Conflict for business-rule refusals | The request was valid but clashes with the current state (slot taken, too late to cancel, ticket handled). 422 is kept for malformed input, 410 for an expired hold. |
+| Every error is `{"message": ..., "errors": ...}` | Clients write one error handler. Laravel's validation JSON already has this shape; the exception renderers map every other failure onto it. Test: all error responses carry a string `message`. |
+| Each `throttle` has its own name | Counters are separate per limiter (same lesson as the website). |
+| Haversine in SQL for `?lat=&lng=` | The database sorts and the API never loads every branch. The formula assumes a spherical Earth (radius 6371 km), accurate to about 0.5%, plenty for "nearest branch". |
+| Eager loading on the queue list | One extra query for all services; strict mode would throw on an N+1. |
+
+### A bug found while testing
+The dummy hash used to equalise timing for unknown emails was not a valid bcrypt hash, so logging in with an unknown email returned a 500 instead of a 401. The test for "unknown email gives the same answer as a wrong password" caught it.
+
+### Concepts to know
+- **Sanctum:** personal access tokens stored hashed in `personal_access_tokens`, with an `abilities` array; `abilities:` middleware requires all listed abilities.
+- **API Resources:** a transformation layer that decides exactly which fields leave the system, so a model change can't leak a column.
+- **HTTP status choices:** 401 (who are you?), 403 (not allowed), 404, 409 (conflicts with state), 410 (gone), 422 (bad input), 429 (slow down).
+- **Test-app caching:** in tests the application and auth guard persist across requests; a helper resets the guard between different tokens. In production each request is a fresh process.
+
+### Likely interview questions
+
+**Q1. How do you stop a stolen API token doing damage?**
+Each token carries only the abilities of its role (a front desk token has `queue:read` and `queue:issue`; it cannot call customers), it expires after 12 hours, it can be revoked with `DELETE /auth/tokens/current`, and policies still limit it to the user's own branch. Login is rate limited to 5 per minute, and token creation is written to the audit log without the token or password.
+
+**Q2. Why 409 instead of 422 when the slot was just taken?**
+422 means "your input is invalid", which the client can fix by changing the input fields. A taken slot has perfectly valid input; it conflicts with the current state of the system, and the right reaction is to pick another time. 409 Conflict says exactly that, so API clients can handle it differently from validation errors.
+
+**Q3. How do you keep the API and the website from drifting apart?**
+Controllers on both sides are thin and call the same Action classes. Business rules such as "hold the slot under a row lock" or "call next skips locked tickets" exist once. The API only adds transport concerns: JSON resources, token headers and status codes. The Pest suite tests both entry points against the same behaviour.
