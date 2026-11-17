@@ -89,7 +89,7 @@ it('keeps the migration status list in sync with the AppointmentStatus enum', fu
     $list = str_replace(['_utf8mb4', '\\', "'"], ' ', $m[1] ?? '');
     preg_match_all('/[a-z]+(?:_[a-z]+)*/', $list, $values);
 
-    $inDatabase = $values[1];
+    $inDatabase = $values[0];
     $inEnum = AppointmentStatus::activeValues();
     sort($inDatabase);
     sort($inEnum);

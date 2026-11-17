@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * @property TicketStatus
+ * @property TicketStatus $status
  */
 class QueueTicket extends Model
 {

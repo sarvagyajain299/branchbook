@@ -104,3 +104,48 @@ database. But our correctness depends on MySQL behaviour that SQLite doesn't sha
 with a unique index prevents double bookings, `SELECT ... FOR UPDATE` row locks, and window functions in
 the reports. A test suite that passes on SQLite but fails on MySQL gives false confidence. Matching CI
 to production (same MySQL 8.0 image) is worth the extra seconds.
+
+---
+
+## Phase 1 (+2) — Domain model, enums, seed data, staff roles and policies
+
+Scope note: the build was compressed (about 5-6 hours), so the brief's Phase 1 and the data-and-policy half of Phase 2 were done together. HTTP-level 403 tests arrive with the screens that need them (the front desk screens); here the policies are tested at the Gate level.
+
+### What was built
+- 12 tables with foreign keys, unique constraints and indexes, each explained in its migration.
+- Backed enums (`Role`, `AppointmentStatus`, `AppointmentChannel`, `TicketStatus`) with the allowed status transitions in one place.
+- 12 Eloquent models, factories, a deterministic `DemoSeeder` (3 branches, 6 services, 12 advisors, 19 staff users, about 137 appointments, about 148 queue tickets).
+- Policies for Branch, Appointment, QueueTicket, Customer and AuditLog, plus a `visibleTo(User)` query scope on Branch, Appointment and QueueTicket.
+- Public registration removed. Staff sessions expire after 30 minutes. Login throttling is Breeze's existing 5-attempt limit.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| `active_slot_key` generated column + unique index | MySQL itself refuses two active bookings for the same advisor and start time, even if application code has a bug. NULLs are distinct in a unique index, so cancelled and expired rows never block a slot. |
+| The status list is hard-coded in the migration, with a test comparing it to the enum | A migration must not change meaning when an enum changes later. The test fails if the two ever drift apart. |
+| Unique index only covers the same start time | Two bookings of different lengths can overlap without sharing a start. Phase 3/4 add the transaction + `lockForUpdate` + overlap check on top. The index is the last safety net, not the whole defence. |
+| `DATETIME` columns (not `TIMESTAMP`) in UTC | TIMESTAMP is converted using the session timezone; DATETIME stores exactly what we write. Also, MySQL requires deterministic expressions for generated columns. |
+| `status`, `role` and `branch_id` are not mass-assignable | A request that posts `role=hq_admin` cannot promote anyone. Status changes only through `transitionTo()`, which rejects invalid jumps. |
+| `users.role` defaults to `front_desk` | Least privilege: a row created without a role gets the most restricted one. |
+| Phone is `encrypted`, email is the lookup key | Encryption output differs every time, so `WHERE phone = ?` can't work and an index is useless. Look customers up by email. A hashed "blind index" column would allow phone search if ever needed. |
+| Policies **and** query scopes | A policy answers "may I touch this one record?"; a scope makes a list query return only allowed rows. Using only policies leaks rows into lists, counts and exports. Using only scopes leaves single-record routes open to guessing IDs. |
+| Policy checks use `exists()` queries, not `$model->relation` | With `shouldBeStrict()` a lazy-loaded relation throws; a query is also cheaper than loading a model just to compare an id. |
+| `AuditLog` throws on update or delete | Append-only is enforced in code, not just by convention. (A database-level privilege restriction would be the production hardening step.) |
+| Larastan did not read the enum casts | Fixed with `@property` annotations on the models, which also help IDE autocompletion. |
+
+### Concepts to know
+- **N+1:** looping over 100 appointments and reading `$a->customer` runs 1 + 100 queries. `with('customer')` runs 2. Strict mode throws on lazy loading, but only for models loaded as a collection of 2 or more (a single `find()` is exempt).
+- **Migrations:** each file is one reversible step with `up()`/`down()`, run in filename order and recorded in the `migrations` table. Never edit a migration that has run in a shared environment; add a new one.
+- **Generated columns:** `STORED` computes the value on write and keeps it on disk, so it can carry an index. `VIRTUAL` computes on read.
+- **Factories vs seeders:** factories build realistic rows for tests; the seeder composes them into a believable demo world.
+
+### Likely interview questions
+
+**Q1. How do you stop two customers booking the same advisor at the same time?**
+In layers. At the database, a generated column `active_slot_key` equals `advisor|start` only while the appointment is active (held, confirmed, checked in, in service) and NULL otherwise, with a unique index on it. MySQL allows many NULLs in a unique index, so cancelled rows never block a slot, but two active rows for one advisor and start are rejected even if the PHP code is wrong. That index only catches identical start times, so the booking action also runs in a transaction that locks the advisor row with `lockForUpdate`, checks for overlapping active appointments (`starts_at < :end AND ends_at > :start`), then inserts, and turns a unique violation into a friendly "slot just taken" message.
+
+**Q2. Why both policies and query scopes for authorization?**
+They protect different things. A policy decides whether this user may act on this specific record, which is what guards a URL like `/appointments/42`. A scope filters list queries, so a branch manager's appointment list, counts and exports only ever contain their branch. With only policies, lists leak other branches' rows; with only scopes, someone can guess an ID and open a record directly. Both rules come from the same role and branch data, and the policy matrix test covers every role against every ability.
+
+**Q3. Why isn't `status` in `$fillable`?**
+Mass assignment is the classic privilege-escalation hole: any field the user can post becomes writable. Status is a state machine, so the only legal way to change it is `transitionTo()`, which checks the allowed transitions and throws `InvalidStatusTransition` otherwise. Keeping it out of `$fillable` means a bug or a crafted request can't move a completed appointment back to held. The same applies to `role` and `branch_id` on users.

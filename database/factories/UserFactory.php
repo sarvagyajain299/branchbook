@@ -45,7 +45,7 @@ class UserFactory extends Factory
         return $this->state(fn (): array => [
             'role' => $role,
             // A nested factory is resolved (and its row created) by Laravel when the user is created.
-            'branch_id' => $branch?->id ?? Branch::factory(),
+            'branch_id' => $branch instanceof Branch ? $branch->id : Branch::factory(),
         ]);
     }
 }

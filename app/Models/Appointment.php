@@ -8,6 +8,7 @@ use App\Enums\AppointmentChannel;
 use App\Enums\AppointmentStatus;
 use App\Enums\Role;
 use App\Exceptions\InvalidStatusTransition;
+use Carbon\CarbonImmutable;
 use Database\Factories\AppointmentFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /**
  * @property AppointmentStatus $status
  * @property AppointmentChannel $channel
+ * @property CarbonImmutable $starts_at
+ * @property CarbonImmutable $ends_at
  */
 class Appointment extends Model
 {
