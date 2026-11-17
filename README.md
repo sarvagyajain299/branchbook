@@ -17,7 +17,7 @@ next customer, and a waiting-room screen shows who goes to which desk.
 | Double-booking prevention: MySQL generated column + unique index **and** transactional row locks | Done |
 | Availability engine: hours, breaks, closures, leave, buffers, notice, 15-minute grid, cached with instant invalidation | Done |
 | Pluggable advisor assignment (load balancing or random) behind an interface | Done |
-| Customer booking: service, branch, time (JSON picker), details, email OTP, confirmation, `.ics`, private manage/cancel link | Done |
+| Customer booking: service, branch, time (JSON picker), details, email OTP, confirmation, `.ics`, private manage link with cancel and **reschedule** | Done |
 | Scheduled jobs: expire holds, reminders (idempotent), no-show marking | Done |
 | Staff roles (HQ, manager, advisor, front desk) with branch-scoped policies and query scopes | Done |
 | Front desk check-in, walk-ins, daily queue tickets (`A-042`) | Done |
@@ -26,7 +26,7 @@ next customer, and a waiting-room screen shows who goes to which desk.
 | Audit log (append-only), security log channel, security headers, health command, data-retention job, `composer audit` in CI | Done |
 | REST API `/api/v1` (Sanctum tokens with per-role abilities, OpenAPI spec, Postman collection) | Done, see [`docs/openapi.yaml`](docs/openapi.yaml) |
 | Reports (raw SQL: window functions, recursive CTE, P90), Chart.js charts and streamed CSV exports at `/admin/reports` | Done |
-| Backpack admin panel, reschedule, Arabic/RTL | **Not built yet** (see "What I'd do next") |
+| Backpack admin panel, Arabic/RTL | **Not built yet** (see "What I'd do next") |
 
 ## Stack
 Laravel 13 · PHP 8.3 · MySQL 8.0 · Laravel Sail (Docker) · Blade + Tailwind + small vanilla JS ·
@@ -38,7 +38,7 @@ Breeze (staff login) · Pest 4 · Pint · Larastan level 6 · GitHub Actions.
 $ sail composer ci
 pint --test      -> PASS
 phpstan (lvl 6)  -> [OK] No errors
-pest             -> Tests: 380 passed (2618 assertions)
+pest             -> Tests: 401 passed (2729 assertions)
 
 $ bash scripts/concurrency-check.sh        # real parallel processes against MySQL
 Result: 7 passed, 0 failed
@@ -121,10 +121,9 @@ are rate limited, and pages send CSP, X-Frame-Options, Referrer-Policy and Permi
 
 ## What I'd do next
 1. **Backpack admin panel** for branches, services, advisors, shifts and the audit log.
-2. **Reschedule** in the customer journey and the API.
-3. **Arabic / RTL** with the layout already using logical CSS properties.
-4. Subtract advisor leave from utilisation capacity.
-5. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
+2. **Arabic / RTL** with the layout already using logical CSS properties.
+3. Subtract advisor leave from utilisation capacity.
+4. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
 
 ## Repository workflow
 `main` (releases) ← `develop` (integration) ← `feature/*` (one per phase), merged by pull request with CI

@@ -37,6 +37,13 @@
                class="inline-block rounded-md border border-teal-700 px-4 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Add to calendar (.ics)</a>
         </p>
 
+        @if ($canCancel)
+            <p class="mt-4">
+                <a href="{{ route('booking.reschedule', ['reference' => $appointment->reference, 'token' => $token]) }}"
+                   class="inline-block rounded-md border border-teal-700 px-4 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Reschedule</a>
+            </p>
+        @endif
+
         <section class="mt-8" aria-labelledby="cancel">
             <h2 id="cancel" class="text-lg font-semibold">Cancel this appointment</h2>
             @if ($canCancel)

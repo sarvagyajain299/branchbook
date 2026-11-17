@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Booking\BookingController;
 use App\Http\Controllers\Booking\ManageBookingController;
+use App\Http\Controllers\Booking\RescheduleBookingController;
 use App\Http\Controllers\Booking\VerificationController;
 use App\Http\Controllers\Branch\AdvisorDeskController;
 use App\Http\Controllers\Branch\DisplayController;
@@ -27,6 +28,10 @@ Route::post('/booking/verify/{reference}/resend', [VerificationController::class
 
 Route::get('/booking/{reference}', [ManageBookingController::class, 'show'])->middleware('throttle:30,1,manage')->name('booking.show');
 Route::get('/booking/{reference}/calendar.ics', [ManageBookingController::class, 'calendar'])->middleware('throttle:30,1,calendar')->name('booking.calendar');
+Route::get('/booking/{reference}/reschedule', [RescheduleBookingController::class, 'show'])->middleware('throttle:30,1,reschedule-view')->name('booking.reschedule');
+Route::get('/booking/{reference}/reschedule/slots', [RescheduleBookingController::class, 'slots'])->middleware('throttle:60,1,reschedule-slots')->name('booking.reschedule.slots');
+Route::get('/booking/{reference}/reschedule/confirm', [RescheduleBookingController::class, 'confirm'])->middleware('throttle:30,1,reschedule-confirm')->name('booking.reschedule.confirm');
+Route::post('/booking/{reference}/reschedule', [RescheduleBookingController::class, 'perform'])->middleware('throttle:10,1,reschedule')->name('booking.reschedule.perform');
 Route::post('/booking/{reference}/cancel', [ManageBookingController::class, 'cancel'])->middleware('throttle:10,1,cancel')->name('booking.cancel');
 
 // {service:code}/{branch:code} are two independent models. Without this, Laravel assumes the

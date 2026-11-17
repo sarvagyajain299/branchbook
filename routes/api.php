@@ -24,6 +24,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::post('bookings/{reference}/verify', [BookingController::class, 'verify'])->middleware('throttle:10,1,api-verify')->name('bookings.verify');
     Route::middleware('throttle:30,1,api-manage')->group(function (): void {
         Route::get('bookings/{reference}', [BookingController::class, 'show'])->name('bookings.show');
+        Route::patch('bookings/{reference}', [BookingController::class, 'update'])->name('bookings.update');
         Route::delete('bookings/{reference}', [BookingController::class, 'destroy'])->name('bookings.destroy');
     });
 

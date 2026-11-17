@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Booking\CancelBooking;
+use App\Actions\Booking\HoldAppointment;
 use App\Actions\Booking\StartBooking;
 use App\Actions\Booking\VerifyBooking;
 use App\Data\BookingRequestData;
@@ -12,6 +13,7 @@ use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\StoreBookingRequest;
 use App\Http\Resources\AppointmentResource;
+use App\Mail\BookingConfirmedMail;
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Service;
@@ -19,6 +21,7 @@ use App\Services\ManageToken;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 /** The same booking actions as the website; only the transport (JSON, header token) differs. */
 class BookingController extends Controller
@@ -66,6 +69,21 @@ class BookingController extends Controller
     public function show(Request $request, string $reference): AppointmentResource
     {
         return new AppointmentResource(ManageToken::resolve($reference, $request->header('X-Manage-Token')));
+    }
+
+    /** PATCH /bookings/{reference} {"starts_at": "..."} with X-Manage-Token: moves the booking; returns a NEW reference and token. */
+    public function update(Request $request, string $reference, HoldAppointment $hold): JsonResponse
+    {
+        $data = $request->validate(['starts_at' => ['required', 'date']]);
+        $appointment = ManageToken::resolve($reference, $request->header('X-Manage-Token'));
+
+        [$new, $token] = $hold->reschedule($appointment, CarbonImmutable::parse($data['starts_at'])->utc());
+
+        Mail::to($new->customer->email)->send(new BookingConfirmedMail($new->load(['customer', 'service', 'branch']), $token));
+
+        return (new AppointmentResource($new))
+            ->additional(['manage_token' => $token, 'message' => 'Appointment moved. The old reference is cancelled; use the new reference and manage token.'])
+            ->response()->setStatusCode(200);   // the resource wraps a just-created model, which would default to 201
     }
 
     /** DELETE /bookings/{reference} with header X-Manage-Token (optional JSON {"reason": "..."}). */

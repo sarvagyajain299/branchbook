@@ -24,6 +24,7 @@ and `sail artisan schedule:work` running in two terminals, and Mailpit open at h
 | 11 | Open the manage link without its token | 404 | auto |
 | 12 | Cancel > 2 hours before start | Cancelled; slot bookable again | auto |
 | 13 | Cancel < 2 hours before start | Friendly refusal | auto |
+| 13a | Click **Reschedule**, pick another time, confirm | New reference and email; old appointment cancelled; if the time is taken the old one is kept | auto; **TO RUN** (real clicks) |
 | 14 | Two browsers book the last slot together | One wins, one sees "just taken" | auto (sequential) + parallel |
 | 15 | Wait 10 minutes after step 6 without verifying | Hold expires, slot free | auto |
 
@@ -74,4 +75,4 @@ and `sail artisan schedule:work` running in two terminals, and Mailpit open at h
 | 40 | Fail a staff login, then read `storage/logs/security-*.log` | One line with a hashed email, no readable address | auto |
 
 ## F. Not built yet (cannot be QA'd)
-Backpack admin, reschedule, Arabic/RTL.
+Backpack admin, Arabic/RTL.

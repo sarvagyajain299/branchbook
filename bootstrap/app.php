@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Exceptions\CancellationNotAllowed;
 use App\Exceptions\InvalidStatusTransition;
 use App\Exceptions\QueueActionNotAllowed;
+use App\Exceptions\RescheduleNotAllowed;
 use App\Exceptions\SlotUnavailable;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -44,7 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $api = static fn (Request $request): bool => $request->is('api/*');
 
         // A business rule said no: the request was well-formed but conflicts with current state.
-        foreach ([SlotUnavailable::class, CancellationNotAllowed::class, QueueActionNotAllowed::class, InvalidStatusTransition::class] as $conflict) {
+        foreach ([SlotUnavailable::class, CancellationNotAllowed::class, RescheduleNotAllowed::class, QueueActionNotAllowed::class, InvalidStatusTransition::class] as $conflict) {
             $exceptions->render(fn (Throwable $e, Request $request) => $api($request) && $e instanceof $conflict
                 ? response()->json(['message' => $e->getMessage()], 409)
                 : null);
