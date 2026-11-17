@@ -85,6 +85,12 @@ class Appointment extends Model
         return CarbonImmutable::parse($instant)->setTimezone((string) config('app.display_timezone'))->toDateString();
     }
 
+    /** The start time in the branch's display timezone (Asia/Dubai). */
+    public function localStart(): CarbonImmutable
+    {
+        return $this->starts_at->setTimezone((string) config('app.display_timezone'));
+    }
+
     /**
      * The one place a status changes. Rejects transitions the state machine doesn't allow.
      *

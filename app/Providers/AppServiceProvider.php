@@ -7,6 +7,8 @@ namespace App\Providers;
 use App\Services\Assignment\AdvisorAssignmentStrategy;
 use App\Services\Assignment\LeastBookedTodayStrategy;
 use App\Services\Assignment\RandomStrategy;
+use App\Services\Reminders\LogChannel;
+use App\Services\Reminders\ReminderChannel;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
@@ -20,6 +22,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Reminders go through the ReminderChannel interface. LogChannel only logs; bind a real
+        // SMS/WhatsApp class here to go live (see ReminderChannel's docblock).
+        $this->app->bind(ReminderChannel::class, LogChannel::class);
+
         // Dependency injection in action: anything that type-hints AdvisorAssignmentStrategy
         // receives whichever implementation config chooses. Swap it with ASSIGNMENT_STRATEGY.
         $this->app->bind(AdvisorAssignmentStrategy::class, fn (): AdvisorAssignmentStrategy => match (config('branchbook.assignment_strategy')) {

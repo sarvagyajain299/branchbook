@@ -197,3 +197,52 @@ Results are cached for 60 seconds per branch, service and date. Every cache key 
 
 **Q3. Why an interface for advisor assignment?**
 Different branches may want different policies, such as balancing workload, rotating, or preferring a named advisor. With an `AdvisorAssignmentStrategy` interface, the booking action asks the container for "an assignment strategy" and gets whichever is configured. Adding a policy means adding a class and one line in the provider. Tests can also bind a fake that returns a chosen advisor, which makes booking tests deterministic.
+
+---
+
+## Phase 4 — Customer booking journey
+
+Scope note: reschedule, "nearest branch" (Haversine SQL) and geolocation were cut to fit the 5-6 hour budget. Everything else in the brief's Phase 4 is built.
+
+### What was built
+- Public, mobile-first, accessible Blade pages: choose service, choose branch (city filter), choose time (JSON-loaded week picker), details, verify, confirmed/manage.
+- `StartBooking` (hold + emailed code), `VerifyBooking` (check code, confirm, create manage token), `CancelBooking` (2-hour cut-off), plus `HoldAppointment` with the double-booking defence.
+- Hand-built `.ics` calendar file, queued confirmation email with the file attached.
+- Scheduler: release expired holds (every minute), queue reminders 24 h ahead (every 15 min), mark no-shows 30 min after the start (every 5 min).
+- `ReminderChannel` interface with a `LogChannel` default.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Lock the advisor row, **then** re-check availability | Under MySQL's default REPEATABLE READ, a transaction's snapshot is fixed by its first normal read. The first statement is therefore `SELECT ... FOR UPDATE` on the advisor; the availability re-check after it sees everything the previous lock holder committed. |
+| Try the next free advisor if the preferred one is taken | A lost race for one advisor shouldn't fail the customer while others are free. |
+| Unique index as the last guard | Same "slot taken" message if the index rejects an insert. |
+| Lapsed holds are expired inside the booking transaction | A hold past 10 minutes still occupies the unique index until marked expired; the booking action clears it for that advisor so customers aren't blocked waiting for the scheduler. |
+| OTP: bcrypt hash, 5 attempts, 10 min, bound to the booking reference | A 6-digit code has only 1,000,000 values, so the attempt limit is the real protection and the hash only protects a leaked table. Binding the purpose to the reference means a code for booking A can't confirm booking B. |
+| OTP mail is NOT queued | A queued mailable would store the plain code in the `jobs` table. It is sent immediately instead. |
+| Confirmation mail is queued **and encrypted** (`ShouldBeEncrypted`) | It carries the manage token; the job payload is encrypted with `APP_KEY`. |
+| Manage token: 40 random characters, stored as SHA-256, compared with `hash_equals` | The token is the customer's only credential. High entropy means a fast hash is enough (unlike passwords). Constant-time compare avoids timing leaks. Wrong reference and wrong token both return the same 404. |
+| Manage pages send `Cache-Control: no-store` and `Referrer-Policy: no-referrer` | The token is in the URL, so it must not be cached or leak through the Referer header to other sites. |
+| The verify page requires the booking reference in the session | Knowing a reference alone can't open someone else's verify page. |
+| Reminders claim with `UPDATE ... WHERE reminder_sent_at IS NULL` | An atomic claim makes the job idempotent: a duplicate or retried job changes 0 rows and sends nothing. If sending fails the claim is released so the retry works. |
+| Each `throttle` has its own name | `throttle:N,M` routes share ONE per-IP counter unless named, so ordinary page views were eating the resend budget. A test caught this. |
+| `withoutScopedBindings()` on the book routes | `{service:code}/{branch:code}` makes Laravel treat branch as a child of service. They are independent models. |
+| Slot picker uses `textContent`, never `innerHTML` | Nothing from the server can inject markup. |
+
+### Concepts to know
+- **Form Requests:** validation and input cleaning (phone and email normalisation in `prepareForValidation`) live outside the controller.
+- **Transactions and `lockForUpdate`:** a pessimistic row lock serialises competing bookings for the same advisor.
+- **Queues:** `ShouldQueue` mailables go to the `jobs` table; `ShouldBeEncrypted` encrypts the payload.
+- **Scheduler:** `Schedule::command(...)->everyMinute()` entries are run by one cron line calling `schedule:run`; `withoutOverlapping()` stops a slow run from stacking.
+- **Honest test limit:** the race is tested sequentially (second booking for a taken slot fails) and at the database level. True parallel requests are not simulated in the Pest suite.
+
+### Likely interview questions
+
+**Q1. Two customers click the last slot at the same moment. What happens?**
+Both calls pick the same free advisor and enter `HoldAppointment::attempt` in a transaction. The first statement is `SELECT ... FOR UPDATE` on that advisor row, so one waits. The winner re-checks availability under the lock, inserts a held appointment and commits. The loser then gets the lock, re-checks, sees the new booking, and throws `SlotUnavailable`; the action tries other free advisors, and if none is left the customer sees "that time was just taken". If anything slipped through, the unique index on `active_slot_key` rejects the insert with the same message.
+
+**Q2. How do you secure a login-free "manage my booking" link?**
+The link contains a 40-character random token. Only its SHA-256 hash is stored, so a leaked database can't produce working links. It's compared with `hash_equals`, and a wrong reference or wrong token returns the same 404. The page is never cached and sends `no-referrer`. The token travels in an email whose queue payload is encrypted. Cancellation is allowed only until two hours before the start.
+
+**Q3. How do you make the reminder job safe to retry?**
+The job starts with one atomic `UPDATE appointments SET reminder_sent_at = now() WHERE id = ? AND status = 'confirmed' AND reminder_sent_at IS NULL`. Only the run that changes a row proceeds to send; a duplicate or retried job changes zero rows and returns. If the provider call throws, the job clears `reminder_sent_at` and rethrows, so the queue's retry can send. The trade-off is at-most-once if the process dies between claiming and sending, which is acceptable for reminders.
