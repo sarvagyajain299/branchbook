@@ -19,7 +19,7 @@ Requirements: Docker Desktop with WSL2 integration enabled, and git inside WSL.
 Clone into the Linux filesystem (`~/code`), **not** `/mnt/c/...`, or Docker will be very slow.
 
 ```bash
-git clone https://github.com/Sarvagya534a/branchbook.git ~/code/branchbook && cd ~/code/branchbook
+git clone https://github.com/sarvagyajain299/branchbook.git ~/code/branchbook && cd ~/code/branchbook
 cp .env.example .env
 docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/html \
   laravelsail/php83-composer:latest composer install --ignore-platform-reqs
