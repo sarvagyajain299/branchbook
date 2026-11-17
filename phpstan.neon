@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # Level 6 = type-checks everything up to and including missing typehints
+    # on properties, parameters and return values. The brief asks for 6+.
+    level: 6
+
+    paths:
+        - app/
+        - config/
+        - database/
+        - routes/
+
+    # Fail CI if an @phpstan-ignore comment no longer matches a real error.
+    reportUnmatchedIgnoredErrors: true

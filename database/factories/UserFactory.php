@@ -1,27 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
+use App\Enums\Role;
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * @extends Factory<User>
- */
+/** @extends Factory<User> */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function definition(): array
     {
         return [
@@ -30,16 +25,27 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'role' => Role::HqAdmin,   // HQ staff have no branch, so the default needs no extra data
+            'branch_id' => null,
         ];
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
+        return $this->state(fn (): array => ['email_verified_at' => null]);
+    }
+
+    public function hqAdmin(): static
+    {
+        return $this->state(fn (): array => ['role' => Role::HqAdmin, 'branch_id' => null]);
+    }
+
+    public function forBranch(Role $role, ?Branch $branch = null): static
+    {
+        return $this->state(fn (): array => [
+            'role' => $role,
+            // A nested factory is resolved (and its row created) by Laravel when the user is created.
+            'branch_id' => $branch instanceof Branch ? $branch->id : Branch::factory(),
         ]);
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
 
     /*
@@ -66,6 +68,20 @@ return [
     */
 
     'timezone' => 'UTC',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Display Timezone (BranchBook)
+    |--------------------------------------------------------------------------
+    |
+    | Datetimes are STORED and computed in UTC (the 'timezone' above) and are
+    | only converted to this zone at the edges: Blade views, emails, .ics
+    | files and slot labels. All Northwind Bank branches are in the UAE
+    | (UTC+4, no daylight saving), so one display zone is enough.
+    |
+    */
+
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'Asia/Dubai'),
 
     /*
     |--------------------------------------------------------------------------
