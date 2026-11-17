@@ -159,6 +159,36 @@ paths:
                 properties:
                   data: { $ref: '#/components/schemas/Appointment' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Bookings]
+      summary: Reschedule a confirmed booking (until 2 hours before it starts)
+      description: Books the new time first and releases the old one in the same transaction. The old reference is cancelled; the response carries a NEW reference and a NEW manage token.
+      security: [{ manageToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Reference' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [starts_at]
+              properties:
+                starts_at: { type: string, format: date-time, description: A slot's starts_at at the same branch for the same service }
+      responses:
+        '200':
+          description: Moved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Appointment' }
+                  manage_token: { type: string, description: For the new reference; shown once }
+                  message: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Bookings]
       summary: Cancel a booking (until 2 hours before it starts)

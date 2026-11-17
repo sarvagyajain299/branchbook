@@ -464,3 +464,40 @@ Foreign keys from appointments are restrictive on purpose, and deleting would al
 
 **Q3. What goes in a security log and what must stay out?**
 Events an investigator needs: failed logins, lockouts, token creation. Each entry carries identifiers that can be matched but not read: hashed email, user id, booking reference. It must never contain passwords, tokens, OTP codes, raw emails, phone numbers or names. A test asserts that a failed login with a mixed-case email logs only the hash of the normalised address.
+
+---
+
+## Phase 4 (rest) — Reschedule
+
+### What was built
+- Web: a **Reschedule** button on the private manage page, a slot picker for the same service and branch, a "Move your appointment?" confirmation page, and a new confirmation email with the calendar file.
+- API: `PATCH /bookings/{reference}` with `X-Manage-Token`, returning the new booking and a new manage token.
+- One implementation: `HoldAppointment::reschedule()`, sharing the booking transaction with new bookings.
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Book the new slot **first**, release the old one **last**, in one transaction | If the new time is gone the customer keeps the original appointment; there is never a moment where they hold neither. A rollback undoes both halves together. |
+| Lock the advisor row **and** the old appointment row | The advisor lock stops double booking of the new slot; locking the old booking stops it being cancelled, checked in or moved twice in parallel. |
+| A reschedule creates a new appointment with `rescheduled_from_id`, and cancels the old one | History stays truthful (the old row records why it ended: "Rescheduled to NWB-..."), and reports see one cancelled and one confirmed appointment. |
+| New reference and **new manage token** | The old token belonged to a now-cancelled appointment; issuing a fresh pair avoids a token that points to the wrong booking. The old reference still shows its history. |
+| Same 2-hour cut-off as cancelling | One rule customers can understand; enforced inside the action so web and API agree. |
+| Same time refused | A "reschedule" to the identical slot would be a no-op that churns references and emails. |
+| Slot week built by a shared `WeekPayload` | The booking picker and the reschedule picker render the same JSON; only the link target differs. |
+| `RescheduleNotAllowed` is a separate exception from `CancellationNotAllowed` | The messages differ, and the API maps it to 409 like the other business-rule refusals. |
+
+### Concepts to know
+- **Atomicity:** a transaction groups the insert of the new row and the update of the old one; both happen or neither does.
+- **Pessimistic locks on two rows:** always take locks in the same order (advisor, then appointment) to avoid deadlocks.
+- **Resource status codes:** a Laravel API Resource wrapping a model created during the request answers 201 by default; a move returns 200, so the code is set explicitly.
+
+### Likely interview questions
+
+**Q1. How do you reschedule without risking the customer losing their appointment?**
+In one transaction I lock the advisor, lock the old appointment, check that the new slot is still free, insert the new confirmed appointment, and only then mark the old one cancelled with a pointer to the new reference. If the new slot was just taken, an exception rolls everything back and the original appointment is untouched; a test asserts exactly that.
+
+**Q2. Why create a new appointment instead of just changing `starts_at`?**
+A new row keeps a clean history: the old appointment ends as cancelled with a reason and link, reports and audit entries stay accurate, and it avoids rewriting a row that other parts (queue tickets, reminders) may already reference. It also lets the new booking get a new reference and a new secret token.
+
+**Q3. How are web and API kept consistent for this feature?**
+Both call `HoldAppointment::reschedule()`. The action enforces the cut-off, status and same-time rules and throws domain exceptions; the web controller turns them into redirects with a message and the API turns them into 409 JSON responses.

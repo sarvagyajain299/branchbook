@@ -254,6 +254,51 @@
           }
         },
         {
+          "name": "Reschedule booking (new reference + token in the response)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Manage-Token",
+                "value": "{{manageToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{reference}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{reference}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"starts_at\": \"{{slotStart}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json(); if (j.manage_token) { pm.collectionVariables.set('manageToken', j.manage_token); pm.collectionVariables.set('reference', j.data.reference); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Cancel booking",
           "request": {
             "method": "DELETE",
