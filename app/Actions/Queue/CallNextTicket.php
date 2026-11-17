@@ -9,6 +9,7 @@ use App\Exceptions\QueueActionNotAllowed;
 use App\Models\Advisor;
 use App\Models\QueueTicket;
 use App\Models\User;
+use App\Support\Audit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -60,6 +61,7 @@ final class CallNextTicket
             $ticket->desk_label = $advisor->desk_label;
             $ticket->called_at = $now;
             $ticket->transitionTo(TicketStatus::Called);   // validates waiting -> called, then saves
+            Audit::record('ticket.called', $ticket, ['code' => $ticket->display_code, 'advisor_id' => $advisor->id], $user);
 
             return $ticket;
         });

@@ -15,4 +15,10 @@ return [
     | (shifts, leave, opening hours).
     */
     'availability_cache_seconds' => (int) env('AVAILABILITY_CACHE_SECONDS', 60),
+
+    /*
+    | Send the Strict-Transport-Security header over HTTPS. Leave off until the site is
+    | permanently HTTPS-only: browsers remember the setting for a year.
+    */
+    'hsts' => (bool) env('ENABLE_HSTS', false),
 ];

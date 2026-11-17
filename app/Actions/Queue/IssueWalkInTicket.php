@@ -8,6 +8,7 @@ use App\Exceptions\QueueActionNotAllowed;
 use App\Models\Branch;
 use App\Models\QueueTicket;
 use App\Models\Service;
+use App\Support\Audit;
 
 /** Front desk: someone without an appointment walks in. */
 final class IssueWalkInTicket
@@ -21,6 +22,11 @@ final class IssueWalkInTicket
             throw QueueActionNotAllowed::serviceUnavailable();
         }
 
-        return $this->issue->handle($branch, $service, null, $name);
+        $ticket = $this->issue->handle($branch, $service, null, $name);
+
+        // The optional name is personal data: it is NOT written to the audit log.
+        Audit::record('ticket.walk_in_issued', $ticket, ['code' => $ticket->display_code]);
+
+        return $ticket;
     }
 }

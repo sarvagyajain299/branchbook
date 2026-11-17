@@ -7,6 +7,7 @@ namespace App\Actions\Booking;
 use App\Enums\AppointmentStatus;
 use App\Exceptions\CancellationNotAllowed;
 use App\Models\Appointment;
+use App\Support\Audit;
 use Carbon\CarbonImmutable;
 
 final class CancelBooking
@@ -29,5 +30,7 @@ final class CancelBooking
 
         $appointment->cancelled_reason = $reason !== null && $reason !== '' ? $reason : 'Cancelled by customer';
         $appointment->transitionTo(AppointmentStatus::Cancelled);
+
+        Audit::record('appointment.cancelled', $appointment, ['by' => 'customer', 'reason' => $appointment->cancelled_reason]);
     }
 }
