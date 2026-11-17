@@ -51,7 +51,7 @@ definitions:
           - vendor/bin/pint --test
           - vendor/bin/phpstan analyse --no-progress --memory-limit=1G
           - php artisan migrate --force
-          - vendor/bin/pest --ci
+          - vendor/bin/pest
 
 pipelines:
   pull-requests:
