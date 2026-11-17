@@ -10,6 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property list<string> $required_documents
+ * @property int $duration_minutes
+ * @property int $buffer_minutes
+ * @property int $min_notice_hours
+ * @property int $max_days_ahead
+ */
 class Service extends Model
 {
     /** @use HasFactory<ServiceFactory> */

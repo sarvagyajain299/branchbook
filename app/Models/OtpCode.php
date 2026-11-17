@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property CarbonImmutable $expires_at
+ * @property CarbonImmutable|null $consumed_at
+ * @property int $attempts
+ */
 class OtpCode extends Model
 {
     /** @var list<string> */
