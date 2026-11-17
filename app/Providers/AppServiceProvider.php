@@ -36,5 +36,15 @@ class AppServiceProvider extends ServiceProvider
         // a CarbonImmutable. Mutable dates are a classic slot-calculation bug:
         // $start->addMinutes(30) would silently change $start as well.
         Date::use(CarbonImmutable::class);
+
+        // TODO(sarvagya): Block destructive Artisan commands in production.
+        // `migrate:fresh`, `migrate:refresh`, `migrate:reset` and `db:wipe` drop
+        // every table. Typed into the wrong terminal on the live server, they would
+        // erase every customer booking.
+        // Hint: Laravel has one static method on the DB facade for this. Search
+        // the docs for "prohibitDestructiveCommands", pass it a boolean that is
+        // true only in production (look how shouldBeStrict() is called above),
+        // and import the facade (Illuminate\Support\Facades\DB).
+        // Check: `sail pint --test` and `sail composer stan` stay green.
     }
 }
