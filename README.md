@@ -1,8 +1,10 @@
-# BranchBook
+<h1 align="center">BranchBook</h1>
 
-![CI](https://github.com/sarvagyajain299/branchbook/actions/workflows/ci.yml/badge.svg)
+<p align="center">
+  <img src="https://github.com/sarvagyajain299/branchbook/actions/workflows/ci.yml/badge.svg" alt="CI">
+</p>
 
-Appointment booking and queue management for bank branches.
+<p align="center">Appointment booking and queue management for bank branches.</p>
 
 > Portfolio project. **Northwind Bank**, a fictional UAE bank with branches in Dubai, Abu Dhabi and
 > Sharjah, and all its data are invented.
