@@ -26,7 +26,8 @@ next customer, and a waiting-room screen shows who goes to which desk.
 | Audit log (append-only), security log channel, security headers, health command, data-retention job, `composer audit` in CI | Done |
 | REST API `/api/v1` (Sanctum tokens with per-role abilities, OpenAPI spec, Postman collection) | Done, see [`docs/openapi.yaml`](docs/openapi.yaml) |
 | Reports (raw SQL: window functions, recursive CTE, P90), Chart.js charts and streamed CSV exports at `/admin/reports` | Done |
-| Backpack admin panel, Arabic/RTL | **Not built yet** (see "What I'd do next") |
+| Admin panel at `/admin` (Backpack): branches, hours, closures, services, advisors, shifts, leave, staff users, appointments, masked customers, audit log, dashboard | Done |
+| Arabic/RTL | **Not built yet** (see "What I'd do next") |
 
 ## Stack
 Laravel 13 · PHP 8.3 · MySQL 8.0 · Laravel Sail (Docker) · Blade + Tailwind + small vanilla JS ·
@@ -38,7 +39,7 @@ Breeze (staff login) · Pest 4 · Pint · Larastan level 6 · GitHub Actions.
 $ sail composer ci
 pint --test      -> PASS
 phpstan (lvl 6)  -> [OK] No errors
-pest             -> Tests: 401 passed (2729 assertions)
+pest             -> Tests: 434 passed (2975 assertions)
 
 $ bash scripts/concurrency-check.sh        # real parallel processes against MySQL
 Result: 7 passed, 0 failed
@@ -64,6 +65,8 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/htm
 ./vendor/bin/sail up -d
 ./vendor/bin/sail artisan key:generate
 ./vendor/bin/sail artisan migrate --seed
+./vendor/bin/sail artisan storage:link
+./vendor/bin/sail artisan basset:cache   # downloads the admin panel's CSS/JS once (needs internet)
 ./vendor/bin/sail npm ci
 ./vendor/bin/sail npm run build
 ```
@@ -76,7 +79,8 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/htm
 | Mailpit (all outgoing mail, including codes) | http://localhost:8026 |
 | Health check | http://localhost/up |
 | API (see `docs/openapi.yaml`) | http://localhost/api/v1/branches |
-| Reports (log in as HQ or a manager) | http://localhost/admin/reports |
+| Admin panel (log in as HQ or a manager) | http://localhost/admin |
+| Reports (HQ or a manager) | http://localhost/admin/reports |
 
 Tip: `alias sail='./vendor/bin/sail'`. If port 80, 3306 or 8026 is taken, change `APP_PORT`,
 `FORWARD_DB_PORT` or `FORWARD_MAILPIT_DASHBOARD_PORT` in `.env`.
@@ -120,8 +124,8 @@ Queue and booking actions are written to an append-only audit log with no person
 are rate limited, and pages send CSP, X-Frame-Options, Referrer-Policy and Permissions-Policy headers.
 
 ## What I'd do next
-1. **Backpack admin panel** for branches, services, advisors, shifts and the audit log.
-2. **Arabic / RTL** with the layout already using logical CSS properties.
+1. **Arabic / RTL** with the layout already using logical CSS properties.
+2. Booking on behalf of a customer and rescheduling from the admin panel.
 3. Subtract advisor leave from utilisation capacity.
 4. Replace Alpine's standard build with its CSP build to drop `'unsafe-eval'` from the CSP; add code coverage to CI.
 

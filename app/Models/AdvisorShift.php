@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Database\Factories\AdvisorShiftFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AdvisorShift extends Model
 {
     /** @use HasFactory<AdvisorShiftFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     /** @var list<string> */
     protected $fillable = ['advisor_id', 'weekday', 'starts_at', 'ends_at'];

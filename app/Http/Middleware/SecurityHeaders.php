@@ -32,8 +32,23 @@ class SecurityHeaders
             $headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }
 
-        // Not while the Vite dev server runs (public/hot): it needs inline code and websockets.
-        if (! file_exists(public_path('hot'))) {
+        if ($request->attributes->get('csp_profile') === 'backpack') {
+            // The admin panel (Backpack) is built on inline scripts and styles, so it gets a looser
+            // policy than the public pages. It is still limited to our own origin for everything
+            // else, cannot be framed, and is reachable only by logged-in HQ and manager accounts.
+            $headers->set('Content-Security-Policy', implode('; ', [
+                "default-src 'self'",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+                "style-src 'self' 'unsafe-inline'",
+                "font-src 'self' data:",
+                "img-src 'self' data:",
+                "connect-src 'self'",
+                "base-uri 'self'",
+                "form-action 'self'",
+                "frame-ancestors 'none'",
+            ]));
+        } elseif (! file_exists(public_path('hot'))) {
+            // Not while the Vite dev server runs (public/hot): it needs inline code and websockets.
             $headers->set('Content-Security-Policy', implode('; ', [
                 "default-src 'self'",
                 // 'unsafe-eval' is required by the standard Alpine.js build used by the staff area
