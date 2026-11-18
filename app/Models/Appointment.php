@@ -9,6 +9,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\Role;
 use App\Events\AppointmentChanged;
 use App\Exceptions\InvalidStatusTransition;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Carbon\CarbonImmutable;
 use Database\Factories\AppointmentFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Appointment extends Model
 {
     /** @use HasFactory<AppointmentFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     // `status` is deliberately NOT fillable: it may only change through transitionTo(),
     // so an invalid jump (e.g. completed -> held) can't slip in via mass assignment.

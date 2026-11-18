@@ -501,3 +501,65 @@ A new row keeps a clean history: the old appointment ends as cancelled with a re
 
 **Q3. How are web and API kept consistent for this feature?**
 Both call `HoldAppointment::reschedule()`. The action enforces the cut-off, status and same-time rules and throws domain exceptions; the web controller turns them into redirects with a message and the API turns them into 409 JSON responses.
+
+---
+
+## Phase 5 — Admin panel (Laravel Backpack)
+
+### What was built
+- **Backpack 7 (free core, MIT)** with the Tabler theme at `/admin`, sharing the staff login and session (no second login page).
+- CRUD screens: branches, opening hours, closures and holidays, services, advisors (with skills), weekly shifts, advisor time off, staff users, appointments, customers and the audit log.
+- Dashboard: today's bookings per branch, current queue length, average wait today and no-shows this week.
+- Every query is branch-scoped: HQ administrators see everything, branch managers only their own branch.
+- Custom actions that Backpack's free core does not provide: cancel and no-show buttons on appointments, an audited "reveal contact details" action on customers, a status-history panel built from the audit log, and the dashboard.
+
+### Which parts are Backpack core and which are custom
+| Need | Backpack free core | Built by hand |
+|---|---|---|
+| List, create, edit, show, delete screens, filters, relationship and multi-select fields | Yes | Columns, fields and filters declared per controller |
+| Login | Not used | Reuses the Breeze login: `guard` set to `web`, Backpack's auth routes switched off |
+| Who may enter | A hook (`CheckIfAdmin`) | HQ and branch managers only; others get 403 |
+| Branch scoping | A query hook (`addClause`) | The same `visibleTo()` scopes the rest of the app uses; managers cannot even name another branch in a form |
+| Status change buttons, reveal, history | Button slots only | Buttons, routes and the actions behind them (`StaffAppointmentActions`, `Audit`) |
+| Charts and the dashboard | Charts are a paid add-on | Plain Blade tables here; the Chart.js reports page from Phase 8 stays separate |
+| Document checklist field | `repeatable` stores objects | A one-per-line textarea backed by an accessor and mutator, so the JSON list used by the API and emails is unchanged |
+
+### Why each decision
+| Decision | Why |
+|---|---|
+| Share the existing session login | Two logins for one staff member would mean two password flows and two sets of rules. The panel reuses the guard, the email-verification rule and the role check. |
+| `CheckIfAdmin` checks the role, not just "logged in" | Front desk and advisors are staff too but must not reach branch administration. |
+| No business logic in controllers or views | Controllers only declare columns and fields. Behaviour lives in `StaffAppointmentActions`, `DashboardStats`, the model state machine and policies. |
+| `role` and `branch_id` still not mass-assignable | Backpack creates records with mass assignment, so `UserCrudController` overrides `store` and `update` to set them explicitly, validates them (HQ has no branch, everyone else needs one) and writes an audit entry. |
+| Form Requests for every CRUD | Validation is explicit and testable: unique codes, time ordering, one opening-hours row per weekday, managers restricted to their branch, strong passwords. |
+| Appointments have no create or edit screen | They change status only through the state machine, so the panel offers cancel and no-show instead of free editing. |
+| Customers masked, reveal audited | The list and show pages use the same masking as the front desk. Reveal is a separate POST that checks the policy, writes an audit entry holding only ids, and shows the details once in a flash message. |
+| Looser CSP for admin pages only | Backpack depends on inline scripts and styles. A request attribute set by `CheckIfAdmin` switches `SecurityHeaders` to a profile allowing inline code on `/admin` while everything else keeps the strict policy. The profile still forbids framing and other origins. |
+| Staff cancel needs no cut-off | The two-hour rule is for customers; branch staff may cancel any time before the visit, and the audit entry says it was staff. |
+| `Basset` development mode in tests | Backpack downloads CDN assets on first use; tests set `BASSET_DEV_MODE` so they never touch the network. |
+
+### Concepts to know
+- **Scoped queries as the first line of defence:** the CRUD query is restricted before any row is loaded, so a manager asking for another branch's record gets 404 rather than 403, which also avoids confirming that the record exists.
+- **Policies still apply** to the single-record actions (`cancel`, `markNoShow`, `revealContactDetails`).
+- **Why the CRUD models need `CrudTrait`:** Backpack uses it for fake columns, relationship handling and the translatable and file-upload helpers.
+
+### Likely interview questions
+
+**Q1. How did you stop a branch manager reaching another branch's data in the admin panel?**
+Each CRUD controller restricts its query in `setup()` before anything is loaded: models with their own `branch_id` use the shared `visibleTo()` scope, shifts and time off filter through the advisor's branch, and customers are limited to people with an appointment at the manager's branch. So list searches never contain other branches, and a request for another branch's record returns 404. On top of that, the Form Requests refuse a `branch_id` that is not the manager's, and the single-record actions go through policies. Tests cover the list endpoints, the edit and delete routes and the create forms.
+
+**Q2. Why override `store` and `update` for users?**
+Backpack builds records by mass assignment, and `role` and `branch_id` are deliberately not fillable so that no form can promote an account. The user controller therefore validates the request, sets the role and branch explicitly, hashes the password through the model cast, and records an audit entry with the role change. A test proves a role and branch can be set that way while a mass-assignment attempt still fails elsewhere.
+
+**Q3. What did you have to build yourself on top of Backpack?**
+The login integration (shared session, role check), the branch scoping, cancel, no-show and reveal actions with their buttons and routes, the status-history panel from the audit log, the dashboard, and a looser Content-Security-Policy profile just for admin pages. Backpack supplies the repetitive part: list pages with filters and search, forms, relationship fields and validation display.
+
+### What went wrong along the way (worth telling in an interview)
+1. **Backpack's free core has no list filters.** The ready-made filters are part of the paid PRO package, and the library throws `BackpackProRequiredException` the moment you use its filter API without a licence. My first version used that API; the tests passed (they run in the `testing` environment) but the real local server returned 500 on every list page. The brief says to build PRO-only features by hand rather than buy them, so the admin now registers filters in a plain operation setting, renders them as an ordinary GET form in Backpack's free "top buttons" slot, and applies them straight from the query string. Lesson: a green test suite does not prove the real environment works, so I checked the running site over HTTP too (all nine list pages return 200).
+2. **Backpack fetched every staff avatar from gravatar.com**, sending a hash of the staff email to a third party on every page, and hanging ~50 seconds per page when the network was blocked. A bank cannot leak that. `User::avatarUrl()` now draws an initials badge locally and the CSP no longer mentions gravatar.
+3. **Assets come from CDNs by default**, which the strict CSP rightly blocks. `BASSET_DEV_MODE=false` plus `php artisan basset:cache` downloads them once and serves them from our own origin.
+4. **Test isolation:** Backpack keeps its CRUD panel in a scoped container binding, so several admin requests in one test process shared state. The tests throw the panel away after every request; production handles one request per process and is unaffected.
+
+### Likely interview question (extra)
+**Q4. You used an open-source admin package with a paid tier. How did you handle the paid features?**
+I read the package's licence boundary instead of working around it. Core CRUD, relationship fields and buttons are free; list filters (and some other widgets) are PRO and the library refuses to run them without a licence. I built a small filter bar myself, applied through the query string, and documented which parts are Backpack core and which are custom. I also found the boundary only by running the real server: the test environment doesn't enforce it, so I added an HTTP check of every list page to my verification.

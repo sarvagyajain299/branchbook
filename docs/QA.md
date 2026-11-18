@@ -74,5 +74,17 @@ and `sail artisan schedule:work` running in two terminals, and Mailpit open at h
 | 39 | Run it without `--dry-run` | Those customers become "Anonymised Customer"; their appointments remain; second run reports 0 | auto |
 | 40 | Fail a staff login, then read `storage/logs/security-*.log` | One line with a hashed email, no readable address | auto |
 
-## F. Not built yet (cannot be QA'd)
-Backpack admin, Arabic/RTL.
+## F. Admin panel
+
+| # | Step | Expected | Status |
+|---|---|---|---|
+| 41 | Log in as HQ, open `/admin` | Dashboard with today's figures per branch; sidebar lists every section | auto + HTTP (looks: **TO RUN**) |
+| 42 | Log in as the Dubai manager, open `/admin` | Only Dubai data everywhere; no "Staff users" or "Audit log" | auto |
+| 43 | Edit a service as HQ (documents one per line) | Saved; the booking page shows the new checklist | auto |
+| 44 | Try to open `/admin` as front desk or advisor | 403 | auto |
+| 45 | Appointments: filter by status and date, cancel one, mark another no-show | Rows change; status history on the show page lists the action | auto; **TO RUN** (clicking) |
+| 46 | Customers: list shows masked contact details; click **Reveal** | Details appear once; an audit entry is written | auto |
+| 47 | Create a staff user as HQ | Account works at `/login`; role and branch as chosen | auto |
+
+## G. Not built yet (cannot be QA'd)
+Arabic/RTL; booking on behalf of a customer and reschedule from the admin appointment list.

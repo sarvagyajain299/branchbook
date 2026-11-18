@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
 /** Append-only record of who did what. Rows can be created but never changed or deleted. */
 class AuditLog extends Model
 {
+    use CrudTrait;
+
     public const UPDATED_AT = null;
 
     /** @var list<string> */

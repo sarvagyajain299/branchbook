@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Carbon\CarbonImmutable;
 use Database\Factories\AdvisorTimeOffFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AdvisorTimeOff extends Model
 {
     /** @use HasFactory<AdvisorTimeOffFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     protected $table = 'advisor_time_off';
 

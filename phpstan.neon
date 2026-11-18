@@ -14,3 +14,10 @@ parameters:
 
     # Fail CI if an @phpstan-ignore comment no longer matches a real error.
     reportUnmatchedIgnoredErrors: true
+
+    ignoreErrors:
+        # Backpack's CRUD::column('x')->type(...) and CRUD::field('x')->label(...) are handled by
+        # __call(); only the admin controllers use them.
+        -
+            message: '#^Call to an undefined method Backpack\\CRUD\\app\\Library\\CrudPanel\\(CrudColumn|CrudField)::#'
+            path: app/Http/Controllers/Admin/*
