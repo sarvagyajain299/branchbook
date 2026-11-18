@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Database\Factories\BranchHourFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BranchHour extends Model
 {
     /** @use HasFactory<BranchHourFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     /** @var list<string> */
     protected $fillable = ['branch_id', 'weekday', 'opens_at', 'closes_at', 'break_start', 'break_end'];

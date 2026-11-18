@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Support\Mask;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Database\Factories\CustomerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,13 +18,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Customer extends Model
 {
     /** @use HasFactory<CustomerFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     /** @var list<string> */
     protected $fillable = [
         'first_name', 'last_name', 'email', 'phone', 'email_verified_at',
         'marketing_opt_in', 'last_activity_at',
     ];
+
+    // anonymised_at is set only by the retention job (forceFill), never mass-assigned.
 
     /** @return array<string, string> */
     protected function casts(): array

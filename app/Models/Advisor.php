@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Database\Factories\AdvisorFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Advisor extends Model
 {
     /** @use HasFactory<AdvisorFactory> */
-    use HasFactory;
+    use CrudTrait, HasFactory;
 
     /** @var list<string> */
     protected $fillable = ['user_id', 'branch_id', 'desk_label', 'is_active'];
@@ -23,6 +25,16 @@ class Advisor extends Model
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
+    }
+
+    /**
+     * "Omar Haddad · Desk 1", for dropdowns. Needs the user relation loaded.
+     *
+     * @return Attribute<non-falsy-string, never>
+     */
+    protected function label(): Attribute
+    {
+        return Attribute::get(fn (): string => $this->user->name.' · '.$this->desk_label);
     }
 
     /** @return BelongsTo<User, $this> */
