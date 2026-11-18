@@ -60,6 +60,20 @@ Walking into a bank branch today usually means:
 | **HQ** | One admin panel for every branch, with an audit trail of who did what |
 | **The bank** | Fewer wasted trips and no-shows, and customer data handled safely |
 
+## Screenshots
+
+| Customer picks a time | Front desk |
+|---|---|
+| ![Booking page with free time slots](docs/screenshots/booking-times.jpg) | ![Front desk with walk-in form, today's appointments and waiting queue](docs/screenshots/front-desk.jpg) |
+| **Waiting-room display** | **Admin dashboard** |
+| ![Waiting-room screen showing the ticket being served and who is next](docs/screenshots/waiting-room-display.jpg) | ![Admin dashboard with today's figures per branch](docs/screenshots/admin-dashboard.jpg) |
+
+**Reports** (advisor utilisation chart, with CSV download):
+
+![Reports page](docs/screenshots/reports.jpg)
+
+All names and data are fictional demo data.
+
 ## How it works
 
 ```
